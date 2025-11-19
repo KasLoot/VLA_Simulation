@@ -17,7 +17,7 @@ class RobotSim:
         # Load the model
         self.model = mujoco.MjModel.from_xml_path(model_path)
         self.data = mujoco.MjData(self.model)
-        self.init_joint_angles = model_config["robot_pybullet"]["init_motor_angles"]
+        self.init_joint_angles = np.array(model_config["robot_pybullet"]["init_motor_angles"])
 
         
         # Simulation parameters
@@ -30,9 +30,7 @@ class RobotSim:
         
         # Set initial joint positions if they exist
         if hasattr(self, 'init_joint_angles') and self.init_joint_angles is not None:
-            # Ensure we don't exceed the number of joints in the model
-            num_joints = min(len(self.init_joint_angles), self.model.nq)
-            self.data.qpos[:num_joints] = self.init_joint_angles[:num_joints]
+            self.data.qpos = self.init_joint_angles.copy()
 
         mujoco.mj_forward(self.model, self.data)
 
@@ -43,6 +41,24 @@ class RobotSim:
     def get_joint_velocities(self):
         """Returns the current joint velocities."""
         return self.data.qvel.copy()
+    
+    def get_ee_position(self, body_name="panda_link7"):
+        """Returns the current end-effector position."""
+        try:
+            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        except mujoco.FatalError as exc:
+            raise ValueError(f"Body '{body_name}' not found in the model.") from exc
+        
+        return self.data.xpos[body_id].copy()
+
+    def get_ee_orientation(self, body_name="panda_link7"):
+        """Returns the current end-effector orientation as a quaternion [w, x, y, z]."""
+        try:
+            body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
+        except mujoco.FatalError as exc:
+            raise ValueError(f"Body '{body_name}' not found in the model.") from exc
+        
+        return self.data.xquat[body_id].copy()
 
     def set_control(self, ctrl):
         """
@@ -115,71 +131,131 @@ class RobotSim:
 
                 current_time += time_step
 
-    def compute_ik(self, target_pos, body_name="panda_link8", max_iter=100, tol=1e-3):
+    def compute_ik(self, ee_traj, ee_ori_traj=None, body_name="panda_link7", max_iter=80, tol=1e-4, rot_tol=1e-2, restore_state=True):
         """
-        Simple Inverse Kinematics solver using Jacobian transpose / pseudo-inverse.
-        
+        Compute joint trajectories that track a Cartesian end-effector path.
+
         Args:
-            target_pos (np.array): Desired [x, y, z] position.
-            body_name (str): Name of the end-effector body.
-            max_iter (int): Maximum iterations.
-            tol (float): Tolerance for convergence.
-            
+            ee_traj (array-like): Sequence of [x, y, z] target points with shape (N, 3).
+            ee_ori_traj (array-like, optional): Sequence of [w, x, y, z] target quaternions with shape (N, 4).
+            body_name (str): Name of the end-effector body in the MuJoCo model.
+            max_iter (int): Maximum IK iterations for the first waypoint (subsequent waypoints reuse the previous solution).
+            tol (float): Position tolerance for convergence in meters.
+            rot_tol (float): Orientation tolerance for convergence in radians.
+            restore_state (bool): Whether to restore the simulation state after computation.
+
         Returns:
-            np.array: Joint positions (qpos) that achieve the target.
+            np.ndarray: Joint trajectory with shape (N, nq).
         """
-        # Get body ID
+        traj = np.asarray(ee_traj, dtype=float)
+        if traj.ndim == 1:
+            if traj.size != 3:
+                raise ValueError("ee_traj entries must be 3D Cartesian points.")
+            traj = traj.reshape(1, 3)
+        if traj.shape[1] != 3:
+            raise ValueError("ee_traj must have shape (N, 3).")
+
+        use_orientation = False
+        if ee_ori_traj is not None:
+            ori_traj = np.asarray(ee_ori_traj, dtype=float)
+            if ori_traj.ndim == 1:
+                if ori_traj.size != 4:
+                    raise ValueError("ee_ori_traj entries must be 4D quaternions.")
+                ori_traj = ori_traj.reshape(1, 4)
+            if ori_traj.shape[0] != traj.shape[0]:
+                raise ValueError("ee_ori_traj must have the same length as ee_traj")
+            if ori_traj.shape[1] != 4:
+                raise ValueError("ee_ori_traj must have shape (N, 4) for quaternions [w, x, y, z].")
+            use_orientation = True
+
         try:
             body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, body_name)
-        except:
-            print(f"Body '{body_name}' not found.")
-            return self.data.qpos.copy()
+        except mujoco.FatalError as exc:
+            raise ValueError(f"Body '{body_name}' not found in the model.") from exc
 
-        # Current qpos
-        initial_qpos = self.data.qpos.copy()
-        qpos = initial_qpos.copy()
+        saved_qpos = self.data.qpos.copy()
+        n_points = traj.shape[0]
+        n_dof = self.model.nq
+        joint_traj = np.empty((n_points, n_dof), dtype=float)
+
+        jacp = np.zeros((3, self.model.nv))
+        jacr = np.zeros((3, self.model.nv))
+        damping = 0.05
         
-        # Jacobian matrix
-        jac = np.zeros((3, self.model.nv))
-        
-        # Iterative IK
-        for _ in range(max_iter):
-            # Forward kinematics
-            mujoco.mj_kinematics(self.model, self.data)
-            
-            # Current EE position
-            current_pos = self.data.xpos[body_id]
-            
-            # Error
-            error = target_pos - current_pos
-            if np.linalg.norm(error) < tol:
-                break
+        if use_orientation:
+            jac = np.zeros((6, self.model.nv))
+            error = np.zeros(6)
+            reg_mat = np.eye(6) * (damping ** 2)
+        else:
+            reg_mat = np.eye(3) * (damping ** 2)
+
+        def _compute_jacobian():
+            if hasattr(mujoco, "mj_jacBody"):
+                mujoco.mj_jacBody(self.model, self.data, jacp, jacr, body_id)
+            else:
+                mujoco.mj_jac(self.model, self.data, jacp, jacr, np.zeros(3), body_id)
+
+        q_guess = self.data.qpos.copy()
+
+        for idx, target_pos in enumerate(traj):
+            self.data.qpos[:] = q_guess
+            mujoco.mj_forward(self.model, self.data)
+
+            iter_limit = max_iter if idx == 0 else max(max_iter // 2, 20)
+            converged = False
+
+            for _ in range(iter_limit):
+                current_pos = self.data.xpos[body_id].copy()
+                pos_error = target_pos - current_pos
                 
-            # Compute Jacobian (3xN for position only)
-            # mj_jac(model, data, jacp, jacr, point, body)
-            # jacp: 3 x nv, jacr: 3 x nv
-            jacp = np.zeros((3, self.model.nv))
-            jacr = np.zeros((3, self.model.nv))
-            
-            mujoco.mj_jac(self.model, self.data, jacp, jacr, current_pos, body_id)
-            
-            # Solve J * dq = error
-            # dq = pinv(J) * error
-            # We only care about the arm joints (first 7 usually). 
-            # If there are grippers, we might want to mask them, but let's assume all are active.
-            
-            # Damped Least Squares: dq = J.T * inv(J*J.T + lambda*I) * error
-            # Or just numpy pinv
-            dq = np.linalg.pinv(jacp) @ error
-            
-            # Update qpos
-            qpos += dq * 0.5 # Step size
-            
-            # Set data to new qpos to recompute Jacobian in next step
-            self.data.qpos[:] = qpos
-            
-        # Restore simulation state
-        self.data.qpos[:] = initial_qpos
-        mujoco.mj_kinematics(self.model, self.data)
+                if use_orientation:
+                    target_quat = ori_traj[idx]
+                    current_quat = self.data.xquat[body_id].copy()
+                    
+                    rot_error = np.zeros(3)
+                    mujoco.mju_subQuat(rot_error, target_quat, current_quat)
+
+                    error[:3] = pos_error
+                    error[3:] = rot_error
+                    
+                    if np.linalg.norm(pos_error) <= tol and np.linalg.norm(rot_error) <= rot_tol:
+                        converged = True
+                        break
+                        
+                    _compute_jacobian()
+                    jac[:3] = jacp
+                    jac[3:] = jacr
+                    
+                    jjt = jac @ jac.T + reg_mat
+                    delta = jac.T @ np.linalg.solve(jjt, error)
+                else:
+                    if np.linalg.norm(pos_error) <= tol:
+                        converged = True
+                        break
+
+                    _compute_jacobian()
+                    jjt = jacp @ jacp.T + reg_mat
+                    delta = jacp.T @ np.linalg.solve(jjt, pos_error)
+
+                mujoco.mj_integratePos(self.model, self.data.qpos, delta, 1)
+                
+                # Enforce joint limits
+                for j in range(self.model.njnt):
+                    q_adr = self.model.jnt_qposadr[j]
+                    min_val, max_val = self.model.jnt_range[j]
+                    self.data.qpos[q_adr] = np.clip(self.data.qpos[q_adr], min_val, max_val)
+
+                mujoco.mj_kinematics(self.model, self.data)
+
+            if not converged:
+                err_val = np.linalg.norm(error) if use_orientation else np.linalg.norm(pos_error)
+                print(f"Warning: IK did not converge for waypoint {idx}; residual {err_val:.4f}.")
+
+            q_guess = self.data.qpos.copy()
+            joint_traj[idx] = q_guess
+
+        if restore_state:
+            self.data.qpos[:] = saved_qpos
+            mujoco.mj_forward(self.model, self.data)
         
-        return qpos
+        return joint_traj
