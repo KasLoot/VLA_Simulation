@@ -77,60 +77,6 @@ class RobotSim:
         """Advances the simulation by one step."""
         mujoco.mj_step(self.model, self.data)
 
-
-    def run_simulation(self, ref_object, duration=10.0, cam_config=None):
-        """
-        Launches the interactive viewer with a reference object for control.
-        
-        Args:
-            ref_object: An object that has a method get_values(time) returning desired joint positions and velocities.
-            duration (float): Duration to run the simulation in seconds.
-            cam_config (dict): Optional dictionary with keys: 'lookat', 'distance', 'azimuth', 'elevation'.
-        """
-        print("Launching viewer... Press ESC to exit.")
-        with mujoco.viewer.launch_passive(self.model, self.data) as viewer:
-            
-            # Initialize camera if config is provided
-            if cam_config:
-                if 'lookat' in cam_config:
-                    viewer.cam.lookat[:] = cam_config['lookat']
-                if 'distance' in cam_config:
-                    viewer.cam.distance = cam_config['distance']
-                if 'azimuth' in cam_config:
-                    viewer.cam.azimuth = cam_config['azimuth']
-                if 'elevation' in cam_config:
-                    viewer.cam.elevation = cam_config['elevation']
-
-            current_time = 0.0
-            time_step = self.dt
-            while viewer.is_running() and current_time < duration:
-                step_start = time.time()
-
-                # 1. Get reference values
-                q_d, qd_d = ref_object.get_values(current_time)
-                # print(f"Time: {current_time:.3f}, Desired Q: {q_d}, Desired QD: {qd_d}")
-
-                # 2. Create control signal
-                ctrl = np.zeros(self.model.nu)
-                n_joints = min(len(q_d), self.model.nu)
-                ctrl[:n_joints] = q_d[:n_joints]
-
-                # 3. Apply control
-                self.set_control(ctrl)
-
-                # 4. Step Physics
-                self.step()
-
-                # 5. Sync Viewer
-                viewer.sync()
-
-                # 6. Time keeping (roughly real-time)
-                time_until_next_step = time_step - (time.time() - step_start)
-                if time_until_next_step > 0:
-                    time.sleep(time_until_next_step)
-
-                current_time += time_step
-
     def compute_ik(self, ee_traj, ee_ori_traj=None, body_name="panda_link7", max_iter=80, tol=1e-4, rot_tol=1e-2, restore_state=True):
         """
         Compute joint trajectories that track a Cartesian end-effector path.
