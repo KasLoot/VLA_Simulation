@@ -69,3 +69,6 @@ class SinusoidalReference:
         # Calculate the derivative of the position (velocity)
         qd_d = self.amplitude * 2 * np.pi * self.frequency * np.cos(2 * np.pi * self.frequency * time + self.phase)
         return q_d, qd_d
+    
+
+
