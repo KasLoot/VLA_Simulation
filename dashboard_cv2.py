@@ -4,11 +4,12 @@ import math
 from scipy.spatial.transform import Rotation as R
 
 class RobotDashboardCV2:
-    def __init__(self, num_robots, toggle_names_callback):
+    def __init__(self, num_robots, toggle_names_callback, ui=True):
         self.num_robots = num_robots
         self.toggle_names_callback = toggle_names_callback
         self.show_names = False
         self.running = True
+        self.ui = ui
         self.window_name = "Robot Dashboard"
         
         # Data storage
@@ -40,6 +41,7 @@ class RobotDashboardCV2:
 
     def update(self):
         if not self.running: return
+        if not self.ui: return
 
         # Create canvas
         canvas = np.zeros((self.total_h, self.total_w, 3), dtype=np.uint8)
@@ -98,14 +100,19 @@ class RobotDashboardCV2:
                 rot_str = f"Rot: {euler[0]:.0f} {euler[1]:.0f} {euler[2]:.0f}"
                 cv2.putText(canvas, rot_str, (x, text_y_start + line_height*4), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 1)
 
-        cv2.imshow(self.window_name, canvas)
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27: # Esc
-            self.running = False
-        elif key == ord('n'):
-            self.show_names = not self.show_names
-            if self.toggle_names_callback:
-                self.toggle_names_callback(self.show_names)
+        try:
+            cv2.imshow(self.window_name, canvas)
+            key = cv2.waitKey(1) & 0xFF
+            if key == 27: # Esc
+                self.running = False
+            elif key == ord('n'):
+                self.show_names = not self.show_names
+                if self.toggle_names_callback:
+                    self.toggle_names_callback(self.show_names)
+        except Exception as e:
+            print(f"Warning: OpenCV imshow failed. Disabling dashboard. Error: {e}")
+            self.ui = False
+            cv2.destroyAllWindows()
 
     def close(self):
         self.running = False

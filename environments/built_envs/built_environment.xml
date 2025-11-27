@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
 <mujoco model="panda scene">
-  <compiler angle="radian" meshdir="/home/yuxin/VLA_Simulation/robot_models/franka_emika_panda/assets" autolimits="true" />
+  <compiler angle="radian" meshdir="/Users/liuyuxin/Documents/VLA_Simulation/robot_models/franka_emika_panda/assets" autolimits="true" />
   <statistic center="0.3 0 0.4" extent="1" />
   <visual>
     <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
@@ -87,9 +87,13 @@
   <worldbody>
     <light pos="0 0 1.5" dir="0 0 -1" directional="true" />
     <geom name="floor" size="0 0 0.05" type="plane" material="groundplane" />
-    <body name="robot_0/cube_3" pos="0.6036341127439893 -0.07892999975330542 0.68">
+    <body name="robot_0/cube_1" pos="0.6220882997848284 -0.163515711202568 0.68">
       <freejoint />
-      <geom name="robot_0/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+      <geom name="robot_0/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
+    </body>
+    <body name="robot_0/cube_4" pos="0.44056006566113387 0.2062908753146454 0.68">
+      <freejoint />
+      <geom name="robot_0/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
     <body name="robot_0" pos="0.0 0.0 0" childclass="panda">
       <body name="robot_0/link0" childclass="panda">
@@ -220,9 +224,9 @@
         <geom name="robot_0/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_1/cube_1" pos="2.020226382966426 -0.0022187747313097417 0.68">
+    <body name="robot_1/cube_4" pos="2.126137683272944 0.1928024590457874 0.68">
       <freejoint />
-      <geom name="robot_1/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
+      <geom name="robot_1/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
     <body name="robot_1" pos="1.5 0.0 0" childclass="panda">
       <body name="robot_1/link0" childclass="panda">
@@ -353,7 +357,7 @@
         <geom name="robot_1/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_2/cube_4" pos="3.803292331741104 -0.16201458345172579 0.68">
+    <body name="robot_2/cube_4" pos="3.7424566637331775 0.007762048911167718 0.68">
       <freejoint />
       <geom name="robot_2/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
@@ -486,9 +490,9 @@
         <geom name="robot_2/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_3/cube_4" pos="4.94192914882078 -0.21926150322923318 0.68">
+    <body name="robot_3/cube_1" pos="5.005526318982258 -0.0871126403822867 0.68">
       <freejoint />
-      <geom name="robot_3/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
+      <geom name="robot_3/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
     </body>
     <body name="robot_3" pos="4.5 0.0 0" childclass="panda">
       <body name="robot_3/link0" childclass="panda">
@@ -619,9 +623,9 @@
         <geom name="robot_3/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_4/cube_3" pos="0.6359041886092431 1.5988421192296884 0.68">
+    <body name="robot_4/cube_4" pos="0.5147844736855395 1.6707386348902702 0.68">
       <freejoint />
-      <geom name="robot_4/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+      <geom name="robot_4/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
     <body name="robot_4" pos="0.0 1.5 0" childclass="panda">
       <body name="robot_4/link0" childclass="panda">
@@ -752,9 +756,13 @@
         <geom name="robot_4/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_5/cube_3" pos="2.1501830968227766 1.5949450430929182 0.68">
+    <body name="robot_5/cube_4" pos="2.1027356579647316 1.3576977910166232 0.68">
       <freejoint />
-      <geom name="robot_5/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+      <geom name="robot_5/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
+    </body>
+    <body name="robot_5/cube_1" pos="2.299669411526763 1.4230377429435657 0.68">
+      <freejoint />
+      <geom name="robot_5/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
     </body>
     <body name="robot_5" pos="1.5 1.5 0" childclass="panda">
       <body name="robot_5/link0" childclass="panda">
@@ -885,6 +893,18 @@
         <geom name="robot_5/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
+    <body name="robot_6/cube_3" pos="3.510926399552236 1.6842270788273261 0.68">
+      <freejoint />
+      <geom name="robot_6/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+    </body>
+    <body name="robot_6/cube_1" pos="3.675044757217369 1.3902646602100395 0.68">
+      <freejoint />
+      <geom name="robot_6/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
+    </body>
+    <body name="robot_6/cube_4" pos="3.3863720370424093 1.4759174664178547 0.68">
+      <freejoint />
+      <geom name="robot_6/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
+    </body>
     <body name="robot_6" pos="3.0 1.5 0" childclass="panda">
       <body name="robot_6/link0" childclass="panda">
         <inertial mass="0.629769" pos="-0.041018 -0.00014 0.049974" fullinertia="0.00315 0.00388 0.004285 8.2904e-7 0.00015 8.2299e-6" />
@@ -1014,7 +1034,11 @@
         <geom name="robot_6/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_7/cube_4" pos="5.028460360274009 1.3203245897255442 0.68">
+    <body name="robot_7/cube_3" pos="5.240911790604468 1.5198966045243616 0.68">
+      <freejoint />
+      <geom name="robot_7/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+    </body>
+    <body name="robot_7/cube_4" pos="5.142157183935627 1.488967098481009 0.68">
       <freejoint />
       <geom name="robot_7/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
@@ -1147,9 +1171,13 @@
         <geom name="robot_7/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_8/cube_3" pos="0.5051848802603591 2.964673038322529 0.68">
+    <body name="robot_8/cube_1" pos="0.7017069655636972 3.120487058434115 0.68">
       <freejoint />
-      <geom name="robot_8/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
+      <geom name="robot_8/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" />
+    </body>
+    <body name="robot_8/cube_4" pos="0.429098770924399 2.879107837197147 0.68">
+      <freejoint />
+      <geom name="robot_8/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" />
     </body>
     <body name="robot_8" pos="0.0 3.0 0" childclass="panda">
       <body name="robot_8/link0" childclass="panda">
@@ -1280,7 +1308,7 @@
         <geom name="robot_8/desk_geom" type="box" size="0.3 0.3 0.3" rgba="0.7 0.5 0.3 1" contype="1" conaffinity="1" />
       </body>
     </body>
-    <body name="robot_9/cube_3" pos="2.1202198572085473 2.9645400661031482 0.68">
+    <body name="robot_9/cube_3" pos="2.1071782168472657 2.8460233273078503 0.68">
       <freejoint />
       <geom name="robot_9/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" />
     </body>

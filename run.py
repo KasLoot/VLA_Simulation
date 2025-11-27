@@ -18,16 +18,15 @@ import numpy as np
 
 
 class EnvironmentConfig:
-    row_spacing: list[float] | float = 1.5 # Increased spacing for desks
-    column_spacing: list[float] | float = 1.5
-    maximum_robots_per_row: int = 4
-    env_template_path: str = "environments/templets/environment.xml"
-
+    row_spacing = 1.5 # Increased spacing for desks
+    column_spacing = 1.5
+    maximum_robots_per_row = 4
+    env_template_path = "environments/templets/environment.xml"
 
 class RobotsConfig:
-    names: list[str] = ["franka_emika_panda"]
-    quantities: list[int] = [10]
-    init_joint_positions: list[float] | list[list[float]] | None = None
+    names = ["franka_emika_panda"]
+    quantities = [10]
+    init_joint_positions = None
 
 class SimulationConfig:
     time_step: float = 0.002
@@ -85,7 +84,7 @@ def run_simulation():
         nonlocal show_names
         show_names = state
 
-    dashboard = RobotDashboardCV2(num_robots=robots_config.quantities[0], toggle_names_callback=toggle_names)
+    dashboard = RobotDashboardCV2(num_robots=robots_config.quantities[0], toggle_names_callback=toggle_names, ui=False)
 
     # Initialize Renderer for cameras (smaller size for speed)
     renderer = mj.Renderer(sim.model, height=120, width=160)
