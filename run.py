@@ -58,7 +58,7 @@ def run_simulation():
     objects_dir = os.path.join(Path(__file__).parent, "objects")
 
     builder = EnvironmentBuilder(robot_xml_path[0], xml_path, robots_config, env_config, scene_json_path=scene_json_path, objects_dir=objects_dir)
-    env_tree = builder.build(save_path="/home/yuxin/VLA_Simulation/test/environments/built_envs/built_environment.xml")
+    env_tree = builder.build(save_path="environments/built_envs/built_environment.xml")
     # print(env_tree)
     
     xml_string = ET.tostring(env_tree, encoding='unicode')
