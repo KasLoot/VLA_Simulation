@@ -8,7 +8,7 @@
             0.0
         ],
         "objects": [
-            "cube_4",
+            "basket_1",
             "cube_2",
             "cube_1"
         ]
@@ -22,8 +22,8 @@
             0.0
         ],
         "objects": [
-            "cube_3",
-            "basket_1"
+            "cube_4",
+            "cube_1"
         ]
     },
     {
@@ -35,9 +35,8 @@
             0.0
         ],
         "objects": [
-            "cube_1",
             "cube_2",
-            "cube_3"
+            "basket_1"
         ]
     },
     {
@@ -61,9 +60,8 @@
             0.0
         ],
         "objects": [
-            "cube_1",
-            "basket_1",
-            "cube_3"
+            "cube_4",
+            "cube_2"
         ]
     },
     {
@@ -75,8 +73,7 @@
             0.0
         ],
         "objects": [
-            "cube_4",
-            "basket_1",
+            "cube_1",
             "cube_3"
         ]
     },
@@ -89,7 +86,8 @@
             0.0
         ],
         "objects": [
-            "cube_2"
+            "cube_2",
+            "cube_3"
         ]
     },
     {
@@ -101,8 +99,7 @@
             0.0
         ],
         "objects": [
-            "cube_1",
-            "basket_1"
+            "cube_2"
         ]
     },
     {
@@ -114,9 +111,7 @@
             0.0
         ],
         "objects": [
-            "cube_1",
-            "cube_4",
-            "cube_2"
+            "cube_4"
         ]
     },
     {
@@ -128,8 +123,7 @@
             0.0
         ],
         "objects": [
-            "cube_4",
-            "cube_3"
+            "cube_4"
         ]
     }
 ]
