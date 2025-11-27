@@ -1,0 +1,8 @@
+<body name="basket_1">
+    <geom name="basket_geom"
+            type="cylinder"
+            size="0.1 0.05"
+            rgba="0.8 0.6 0.4 1"
+            contype="1"
+            conaffinity="1"/>
+</body>
