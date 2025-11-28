@@ -22,6 +22,7 @@ class EnvironmentConfig:
     column_spacing = 1.5
     maximum_robots_per_row = 4
     env_template_path = "environments/templets/environment.xml"
+    seed = 20
 
 class RobotsConfig:
     names = ["franka_emika_panda"]
@@ -47,7 +48,7 @@ def run_simulation():
     
     # Generate Scene JSON
     scene_json_path = os.path.join(Path(__file__).parent, "scene", "pick_and_place_scene.json")
-    generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0])
+    generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0], seed=env_config.seed)
     
     # Tunable surface position [x, y, z] relative to robot
     surface_position = [0.6, 0.0, 0.0]
@@ -56,7 +57,13 @@ def run_simulation():
     # Objects Directory
     objects_dir = os.path.join(Path(__file__).parent, "objects")
 
-    builder = EnvironmentBuilder(robot_xml_path[0], xml_path, robots_config, env_config, scene_json_path=scene_json_path, objects_dir=objects_dir)
+    builder = EnvironmentBuilder(robot_xml_path[0], 
+                                 xml_path, 
+                                 robots_config, 
+                                 env_config, 
+                                 scene_json_path=scene_json_path, 
+                                 objects_dir=objects_dir,
+                                 seed=env_config.seed)
     env_tree = builder.build(save_path="environments/built_envs/built_environment.xml")
     # print(env_tree)
     

@@ -3,9 +3,11 @@ import random
 import os
 
 class SceneGenerator:
-    def __init__(self, output_path, num_robots=None):
+    def __init__(self, output_path, num_robots=None, seed: int | None = None):
         self.output_path = output_path
         self.num_robots = num_robots
+        if seed is not None:
+            random.seed(seed)
         assert isinstance(num_robots, int), "num_robots must be specified as an integer"
 
     def generate_scene(self, task, surface_position=[0.6, 0, 0]):

@@ -8,13 +8,23 @@ import random
 from object_library import ObjectLibrary
 
 class EnvironmentBuilder:
-    def __init__(self, robot_xml_path, env_xml_path, robot_config, env_config, scene_json_path=None, objects_dir=None):
+    def __init__(self, 
+                 robot_xml_path, 
+                 env_xml_path, 
+                 robot_config, 
+                 env_config, 
+                 scene_json_path=None, 
+                 objects_dir=None,
+                 seed=None):
         self.robot_xml_path = robot_xml_path
         self.env_xml_path = env_xml_path
         self.robot_config = robot_config
         self.env_config = env_config
         self.scene_json_path = scene_json_path
         self.objects_dir = objects_dir
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
         
         # Parse the base XMLs
         self.robot_tree = ET.parse(robot_xml_path)
