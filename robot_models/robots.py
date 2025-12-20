@@ -290,6 +290,51 @@ class FrankaPandaRobot:
         return joint_trajectory
 
 
+    def pd_control(self, target_positions, current_positions, current_velocities, kp=100.0, kd=20.0):
+        """
+        Updated PD control with proper shape (9,) and reasonable gains.
+        Kp=100, Kd=20 are conservative starting points for torque control.
+        """
+        n_robots = current_positions.shape[0]
+        # Change shape to (n_robots, 9) to match actuator count (7 arm + 2 fingers)
+        control_signals = np.zeros((n_robots, 9)) 
+        
+        for i in range(n_robots):
+            q = current_positions[i]  # Shape (9,)
+            v = current_velocities[i]
+            q_des = target_positions[i]
+            
+            # 1. Compute Gravity (This calculates the torque to hold the robot static)
+            pin.computeGeneralizedGravity(self.model, self.data, q)
+            g = self.data.g  # Shape (9,)
+            
+            # 2. Extract Arm Components
+            q_arm = q[:7]
+            v_arm = v[:7]
+            q_des_arm = q_des[:7]
+            g_arm = g[:7]
+            
+            # 3. PD Control Law for Arm
+            # Note: Do not clamp this to [0,1]. Torques need to be ~20-50 Nm.
+            tau_arm = g_arm + kp * (q_des_arm - q_arm) + kd * (0 - v_arm)
+            
+            # 4. Fill control signals
+            control_signals[i, :7] = tau_arm
+            # Fingers (indices 7,8) are left as 0.0 or you can add logic to close them here
+            
+        return control_signals
+
+
+
+
+
+
+
+
+
+
+
+
 
 if __name__ == "__main__":
     model_path = "robot_models/franka_emika_panda/robot.xml"
