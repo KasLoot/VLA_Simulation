@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 from utils.sim_engine import SimEngine
-from utils.env_builder import EnvironmentBuilder
+from utils.scene_builder import EnvironmentBuilder
 from utils.scene_generator import SceneGenerator
 import json
 
@@ -14,7 +14,7 @@ import json
 from dataclasses import dataclass, field
 import time
 import numpy as np
-from utils.robots import FrankaPandaRobot
+from robot_models.robots import FrankaPandaRobot
 
 import matplotlib.pyplot as plt
 
@@ -23,7 +23,7 @@ class EnvironmentConfig:
     row_spacing = 1.5 # Increased spacing for desks
     column_spacing = 1.5
     maximum_robots_per_row = 4
-    env_template_path = "environments/templets/env_temp_1.xml"
+    env_template_path = "environments/templets/environment.xml"
     seed = 20
 
 class RobotsConfig:
@@ -137,12 +137,12 @@ def run_simulation():
                 maxiter=200
             )
 
-        # sim.set_joint_controls(target_joint_positions.flatten())
-        # sim.forward()
-        # viewer.sync()
-        # time.sleep(2.0)
+        sim.set_joint_controls(target_joint_positions.flatten())
+        sim.forward()
+        viewer.sync()
+        time.sleep(2.0)
 
-        # sim.reset()
+        sim.reset()
 
         # trajectory_joint_positions = robot.generate_trajectory(
         #     start_pos=start_ee_positions_local, 
@@ -178,7 +178,7 @@ def run_simulation():
         mes_ee_orientation = []
         mes_joint_positions = []
 
-        duration = 10.0
+        duration = 8.0
         for t in range(int(duration / sim_config.time_step)):
             mes_joint_positions = sim.get_joint_positions().reshape(robots_config.quantities[0], -1)
             mes_joint_velocities = sim.get_joint_velocities().reshape(robots_config.quantities[0], -1)
@@ -189,7 +189,7 @@ def run_simulation():
             current_positions=mes_joint_positions, 
             current_velocities=mes_joint_velocities,
             kp=100.0,  # Increased from 1.0 to 500.0 for stiffness
-            kd=40.0    # Increased damping to prevent oscillation
+            kd=10.0    # Increased damping to prevent oscillation
             )
             sim.set_actuator_controls(controls.flatten())
             sim.step()

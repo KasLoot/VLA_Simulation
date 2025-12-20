@@ -1,39 +1,24 @@
 import json
 import random
-import xml.etree.ElementTree as ET
-from utils.objects import ObjectLibrary
-
+import os
 
 class SceneGenerator:
-    def __init__(self, output_path, 
-                 num_robots=None, 
-                 seed: int | None = None,
-                 objects_dir="./objects"):
+    def __init__(self, output_path, num_robots=None, seed: int | None = None):
         self.output_path = output_path
         self.num_robots = num_robots
         if seed is not None:
             random.seed(seed)
         assert isinstance(num_robots, int), "num_robots must be specified as an integer"
-        self.object_library = ObjectLibrary(objects_dir=objects_dir)
 
     def generate_scene(self, task, surface_position=[0.6, 0, 0], min_objects=1, max_objects=5, collision=True):
         if task == "pick_and_place":
             self.generate_pick_and_place_scene(self.num_robots, surface_position, min_objects, max_objects, collision)
         else:
             raise ValueError(f"Unsupported task type: {task}")
-    
-    def get_available_objects(self):
-        return self.object_library.available_objects
 
-
-    def generate_pick_and_place_scene(self, 
-                                      num_robots=2, 
-                                      surface_position=[0.5, 0, 0], 
-                                      min_objects=1, 
-                                      max_objects=5, 
-                                      collision=True):
+    def generate_pick_and_place_scene(self, num_robots=2, surface_position=[0.6, 0, 0], min_objects=1, max_objects=5, collision=True):
         scene_data = []
-        available_objects = self.get_available_objects()
+        available_objects = ["cube_1", "cube_2", "cube_3", "cube_4", "basket_1"]
         
         # Fill the rest with random assignments if num_robots > 2
         for i in range(num_robots):
@@ -57,3 +42,7 @@ class SceneGenerator:
         with open(self.output_path, 'w') as f:
             json.dump(data, f, indent=4)
         print(f"Scene JSON saved to {self.output_path}")
+
+if __name__ == "__main__":
+    generator = SceneGenerator("pick_and_place", "test/scene/pick_and_place_scene.json", num_robots=10)
+    generator.generate_scene()

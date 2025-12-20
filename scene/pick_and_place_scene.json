@@ -1,0 +1,132 @@
+[
+    {
+        "robot_index": 0,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "basket_2"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 1,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "basket_1"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 2,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_4"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 3,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_1"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 4,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_4"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 5,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_2"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 6,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "basket_2"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 7,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_4"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 8,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "cube_4"
+        ],
+        "collision": false
+    },
+    {
+        "robot_index": 9,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "basket_1"
+        ],
+        "collision": false
+    }
+]

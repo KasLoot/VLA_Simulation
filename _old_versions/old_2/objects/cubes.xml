@@ -1,4 +1,4 @@
-<body name="cube_1" class="object">
+<body name="cube_1">
     <freejoint/>
     <geom name="block_geom1"
         type="box"
@@ -7,7 +7,7 @@
         density="500"/>
 </body>
 
-<body name="cube_2" class="object">
+<body name="cube_2">
     <freejoint/>
     <geom name="block_geom2"
         type="box"
@@ -16,7 +16,7 @@
         density="500"/>
 </body>
 
-<body name="cube_3" class="object">
+<body name="cube_3">
     <freejoint/>
     <geom name="block_geom3"
         type="box"
@@ -26,7 +26,7 @@
 </body>
 
 
-<body name="cube_4" class="object">
+<body name="cube_4">
     <freejoint/>
     <geom name="block_geom4"
         type="box"
