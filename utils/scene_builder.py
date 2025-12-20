@@ -5,7 +5,7 @@ import mujoco
 import numpy as np
 import json
 import random
-from object_library import ObjectLibrary
+from utils.object_library import ObjectLibrary
 
 class EnvironmentBuilder:
     def __init__(self, 
@@ -114,13 +114,13 @@ class EnvironmentBuilder:
             
             container_body.append(new_body)
             
+            env_worldbody.append(container_body)
+
             # Add Scene Objects if configured
             if i in self.scene_data and self.object_library:
                 # Calculate robot global position
                 robot_pos = [x, y, 0.0]
                 self._add_scene_to_robot(container_body, env_worldbody, robot_pos, self.scene_data[i], prefix)
-
-            env_worldbody.append(container_body)
             
             # Clone and rename actuators, sensors, etc.
             for tag in ['actuator', 'sensor', 'tendon', 'equality', 'contact']:
@@ -199,6 +199,7 @@ class EnvironmentBuilder:
     def _add_scene_to_robot(self, container_body, env_worldbody, robot_pos, scene_config, prefix):
         surface_name = scene_config.get('surface')
         object_names = scene_config.get('objects', [])
+        collision = scene_config.get('collision', True)
         
         surface_body = None
         surface_size = [0.3, 0.3, 0.3] # Default size
@@ -256,6 +257,9 @@ class EnvironmentBuilder:
                     env_worldbody.append(surface_body)
                 else:
                     container_body.append(surface_body)
+                
+                # Apply collision setting to surface as well
+                self._set_collision(surface_body, collision)
         
         # 2. Add Objects
         if surface_body is not None:
@@ -272,14 +276,13 @@ class EnvironmentBuilder:
                 original_obj = self.object_library.get_object(obj_name)
                 if original_obj is not None:
                     obj_body = copy.deepcopy(original_obj)
+                    
+                    # Apply collision setting
+                    self._set_collision(obj_body, collision)
+
+                    # Rename after setting collision and before adding to parent
                     self._rename_recursively(obj_body, prefix)
                     
-                    # Random position on surface
-                    # Surface extent in x: [-size[0], size[0]]
-                    # Surface extent in y: [-size[1], size[1]]
-                    # We want to place it on the surface, relative to the surface center.
-                    # Surface center is at surface_pos relative to container.
-                    # So object pos should be surface_pos + offset.
                     
                     # Get object size to avoid falling off
                     obj_size = [0.03, 0.03, 0.03]
@@ -306,7 +309,7 @@ class EnvironmentBuilder:
                     # Object Z
                     # If object is box, pos is center. We want bottom at surface_top_z.
                     # So pos.z = surface_top_z + obj_size[2]
-                    dz = surface_top_z + obj_size[2] + 0.05 # Add a bit of drop height
+                    dz = surface_top_z + obj_size[2] + 0.001 # Add a tiny bit of drop height
                     
                     # Absolute pos relative to container
                     obj_x = surface_pos[0] + dx
@@ -329,3 +332,25 @@ class EnvironmentBuilder:
                         env_worldbody.append(obj_body)
                     else:
                         container_body.append(obj_body)
+
+    def _set_collision(self, element, enable):
+        if element.tag == 'geom':
+            if not enable:
+                # If collision with robot is disabled:
+                # Set scene objects to group 2 (bit 1).
+                # Robot is default group 1 (bit 0).
+                # Scene objects will collide with each other (2 & 2 != 0)
+                # But not with robot (1 & 2 == 0)
+                element.set('contype', '2')
+                element.set('conaffinity', '2')
+            else:
+                # If collision is enabled, ensure they are in default group 1
+                # or just remove the attributes to let them default
+                # But to be safe, let's set them to 1 if they were modified or just leave them.
+                # If we want to enforce collision, we can set to 1.
+                # But existing objects might have their own settings.
+                # For now, we only modify if enable is False.
+                pass
+        
+        for child in element:
+            self._set_collision(child, enable)

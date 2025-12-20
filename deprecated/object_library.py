@@ -7,10 +7,12 @@ class ObjectLibrary:
         self.objects_dir = objects_dir
         self.objects = {}
         self._load_objects()
+        print(f"self.objects: {self.objects}")
 
     def _load_objects(self):
         # Find all xml files in the directory
         xml_files = glob.glob(os.path.join(self.objects_dir, "*.xml"))
+        print(f"xml_files: {xml_files}")
         
         for file_path in xml_files:
             try:

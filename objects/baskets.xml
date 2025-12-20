@@ -1,8 +1,19 @@
 <body name="basket_1">
-    <geom name="basket_geom"
+    <freejoint/>
+    <geom name="basket_geom1"
             type="cylinder"
             size="0.1 0.05"
             rgba="0.8 0.6 0.4 1"
-            contype="1"
-            conaffinity="1"/>
+            density="1000"
+            friction="1 0.1 0.002"/>
+</body>
+
+<body name="basket_2">
+    <freejoint/>
+    <geom name="basket_geom2"
+            type="cylinder"
+            size="0.15 0.07"
+            rgba="0.6 0.4 0.2 1"
+            density="1000"
+            friction="1 0.1 0.002"/>
 </body>

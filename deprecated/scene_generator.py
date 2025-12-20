@@ -10,22 +10,31 @@ class SceneGenerator:
             random.seed(seed)
         assert isinstance(num_robots, int), "num_robots must be specified as an integer"
 
-    def generate_scene(self, task, surface_position=[0.6, 0, 0]):
+    def generate_scene(self, task, surface_position=[0.6, 0, 0], min_objects=1, collision=True):
         if task == "pick_and_place":
-            self.generate_pick_and_place_scene(self.num_robots, surface_position)
+            self.generate_pick_and_place_scene(self.num_robots, surface_position, min_objects, collision)
         else:
             raise ValueError(f"Unsupported task type: {task}")
 
-    def generate_pick_and_place_scene(self, num_robots=2, surface_position=[0.6, 0, 0]):
+    def generate_pick_and_place_scene(self, num_robots=2, surface_position=[0.6, 0, 0], min_objects=1, collision=True):
         scene_data = []
+        available_objects = ["cube_1", "cube_2", "cube_3", "cube_4", "basket_1"]
         
         # Fill the rest with random assignments if num_robots > 2
         for i in range(num_robots):
+            # Determine number of objects to spawn
+            max_objects = len(available_objects)
+            lower_bound = max(1, min(min_objects, max_objects))
+            upper_bound = max(lower_bound, min(lower_bound + 2, max_objects))
+            
+            k = random.randint(lower_bound, upper_bound)
+            
             scene_data.append({
                 "robot_index": i,
                 "surface": random.choice(["desk_1"]),
                 "surface_position": surface_position,
-                "objects": random.sample(["cube_1", "cube_2", "cube_3", "cube_4", "basket_1"], k=random.randint(1, 3))
+                "objects": random.sample(available_objects, k=k),
+                "collision": collision
             })
 
         self.save_scene(scene_data)
