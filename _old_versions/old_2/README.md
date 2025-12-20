@@ -9,9 +9,9 @@ uv pip install -r requirements.txt
 ```
 
 ## Data Collection
-The `collect_data.py` script allows you to collect data from robotic simulations. It initializes the simulation environment, sets up the robots, and collects joint positions and end-effector positions over time.
+The `collect_data_*.py` script allows you to collect data from robotic simulations. It initializes the simulation environment, sets up the robots, and collects joint positions and end-effector positions over time.
 ```bash
-python collect_data.py
+python collect_data_joint_ctrl.py
 ```
 
 ## Reinforcement Learning Training (Degugging)

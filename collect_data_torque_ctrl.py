@@ -130,41 +130,71 @@ def run_simulation():
         target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
         print(f"Target Position Input:\n {target_pos_input}")
 
-        trajectory_joint_positions = robot.generate_trajectory(
-            start_pos=start_ee_positions_local, 
-            start_rot=start_ee_orientations, 
-            target_pos=target_pos_input, # Use the specific object target
-            target_rot=target_orientations,
-            init_joint_positions=init_joint_positions,
-            num_steps=200,
-            ik_maxiter=10
-        )
+        target_joint_positions = robot.inverse_kinematics_optimization(
+                target_pos=target_pos_input, 
+                target_rot=target_orientations,
+                initial_q=init_joint_positions,
+                maxiter=200
+            )
 
-        print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
+        # sim.set_joint_controls(target_joint_positions.flatten())
+        # sim.forward()
+        # viewer.sync()
+        # time.sleep(2.0)
 
-        # plot joint trajectories for each robot in separate subplots, 4 colomns
-        num_robots = robots_config.quantities[0]
-        num_cols = 4
-        num_rows = (num_robots + num_cols - 1) // num_cols
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
-        for i in range(num_robots):
-            row = i // num_cols
-            col = i % num_cols
-            ax = axs[row, col] if num_rows > 1 else axs[col]
-            for j in range(7): # 7 joints
-                ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
-            ax.set_title(f'Robot {i} Joint Trajectories')
-            ax.set_xlabel('Time Step')
-            ax.set_ylabel('Joint Position (rad)')
-            ax.legend()
-        plt.tight_layout()
-        plt.show()
+        # sim.reset()
 
-        for joint_positions in trajectory_joint_positions.transpose((1,0,2)):
-            sim.set_joint_controls(joint_positions.flatten())
-            sim.forward()
+        # trajectory_joint_positions = robot.generate_trajectory(
+        #     start_pos=start_ee_positions_local, 
+        #     start_rot=start_ee_orientations, 
+        #     target_pos=target_pos_input, # Use the specific object target
+        #     target_rot=target_orientations,
+        #     init_joint_positions=init_joint_positions,
+        #     num_steps=200,
+        #     ik_maxiter=10
+        # )
+
+        # print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
+
+        # # plot joint trajectories for each robot in separate subplots, 4 colomns
+        # num_robots = robots_config.quantities[0]
+        # num_cols = 4
+        # num_rows = (num_robots + num_cols - 1) // num_cols
+        # fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
+        # for i in range(num_robots):
+        #     row = i // num_cols
+        #     col = i % num_cols
+        #     ax = axs[row, col] if num_rows > 1 else axs[col]
+        #     for j in range(7): # 7 joints
+        #         ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
+        #     ax.set_title(f'Robot {i} Joint Trajectories')
+        #     ax.set_xlabel('Time Step')
+        #     ax.set_ylabel('Joint Position (rad)')
+        #     ax.legend()
+        # plt.tight_layout()
+        # plt.show()
+
+        mes_ee_translation = []
+        mes_ee_orientation = []
+        mes_joint_positions = []
+
+        duration = 10.0
+        for t in range(int(duration / sim_config.time_step)):
+            mes_joint_positions = sim.get_joint_positions().reshape(robots_config.quantities[0], -1)
+            mes_joint_velocities = sim.get_joint_velocities().reshape(robots_config.quantities[0], -1)
+            mes_ee_pos, mes_ee_ori = sim.get_all_ee_local_positions()
+            # print(f"mes_joint_positions shape: {mes_joint_positions.shape}, target_joint_positions shape: {target_joint_positions.shape}")
+            controls = robot.pd_control(
+            target_positions=target_joint_positions, 
+            current_positions=mes_joint_positions, 
+            current_velocities=mes_joint_velocities,
+            kp=100.0,  # Increased from 1.0 to 500.0 for stiffness
+            kd=40.0    # Increased damping to prevent oscillation
+            )
+            sim.set_actuator_controls(controls.flatten())
+            sim.step()
             viewer.sync()
-            time.sleep(0.01)
+            time.sleep(sim_config.time_step)
         
         # 1. Get Global Final Positions
         final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
@@ -179,8 +209,8 @@ def run_simulation():
 
         while viewer.is_running():
             continue
-    
-    time.sleep(1.0)
+
+    time.sleep(1)
 
 def main():
     run_simulation()

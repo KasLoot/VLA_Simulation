@@ -1,6 +1,6 @@
 import mujoco
 import numpy as np
-from utils.robots import FrankaPandaRobot
+from robot_models.robots import FrankaPandaRobot
 # Avoid importing run_demo here to prevent circular imports.
 # Accept generic config objects (typing.Any) instead of concrete classes.
 
@@ -32,8 +32,8 @@ class SimEngine():
             
             # Find joints for this robot
             # Assuming standard panda joint names
-            joint_names = [f"{base_name}/joint_{j}" for j in range(1, 8)] + \
-                          [f"{base_name}/finger_joint_1", f"{base_name}/finger_joint_2"]
+            joint_names = [f"{base_name}/joint{j}" for j in range(1, 8)] + \
+                          [f"{base_name}/finger_joint1", f"{base_name}/finger_joint2"]
             
             for j_name in joint_names:
                 j_id = mujoco.mj_name2id(self.sim_env, mujoco.mjtObj.mjOBJ_JOINT, j_name)
@@ -45,8 +45,8 @@ class SimEngine():
                     self.robot_dof_indices.append(dof_addr)
             
             # Find actuators for this robot
-            actuator_names = [f"{base_name}/joint_{j}_motor" for j in range(1, 8)] + \
-                             [f"{base_name}/finger_1_position", f"{base_name}/finger_2_position"]
+            actuator_names = [f"{base_name}/actuator{j}" for j in range(1, 8)] + \
+                             [f"{base_name}/finger_1_actuator", f"{base_name}/finger_2_actuator"]
             for a_name in actuator_names:
                 a_id = mujoco.mj_name2id(self.sim_env, mujoco.mjtObj.mjOBJ_ACTUATOR, a_name)
                 if a_id != -1:
@@ -94,7 +94,7 @@ class SimEngine():
         ee_positions = []
         ee_orientations = []
         for i in range(self.total_robots):
-            site_name = f"robot_{i}/hand_tip_site"
+            site_name = f"robot_{i}/tcp"
             site_id = mujoco.mj_name2id(self.sim_env, mujoco.mjtObj.mjOBJ_SITE, site_name)
             if site_id != -1:
                 ee_positions.append(self.data.site_xpos[site_id].copy())
@@ -107,7 +107,7 @@ class SimEngine():
         ee_positions = []
         ee_orientations = []
         for i in range(self.total_robots):
-            site_name = f"robot_{i}/hand_tip_site"
+            site_name = f"robot_{i}/tcp"
             site_id = mujoco.mj_name2id(self.sim_env, mujoco.mjtObj.mjOBJ_SITE, site_name)
             if site_id != -1:
                 ee_positions.append(self.data.site_xpos[site_id].copy())

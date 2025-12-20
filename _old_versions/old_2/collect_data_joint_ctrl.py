@@ -6,7 +6,7 @@ from pathlib import Path
 
 
 from utils.sim_engine import SimEngine
-from utils.env_builder import EnvironmentBuilder
+from utils.scene_builder import EnvironmentBuilder
 from utils.scene_generator import SceneGenerator
 import json
 
@@ -14,7 +14,7 @@ import json
 from dataclasses import dataclass, field
 import time
 import numpy as np
-from utils.robots import FrankaPandaRobot
+from robot_models.robots import FrankaPandaRobot
 
 import matplotlib.pyplot as plt
 
@@ -23,7 +23,7 @@ class EnvironmentConfig:
     row_spacing = 1.5 # Increased spacing for desks
     column_spacing = 1.5
     maximum_robots_per_row = 4
-    env_template_path = "environments/templets/env_temp_1.xml"
+    env_template_path = "environments/templets/environment.xml"
     seed = 20
 
 class RobotsConfig:
@@ -119,9 +119,19 @@ def run_simulation():
         print(f"Target Orientations shape:\n{target_orientations.shape}")
 
 
-        start_ee_positions_local, start_ee_orientations = sim.get_all_ee_local_positions()
-        print(f"Start EE Positions shape: {start_ee_positions_local.shape}, Start EE Orientations shape: {start_ee_orientations.shape}")
+        start_ee_positions, start_ee_orientations = sim.get_all_ee_positions()
+        print(f"Start EE Positions shape: {start_ee_positions.shape}, Start EE Orientations shape: {start_ee_orientations.shape}")
         start_joint_positions = sim.get_joint_positions()
+
+        base_positions = []
+        for i in range(robots_config.quantities[0]):
+             base_pos = sim.get_body_position_from_name(f"robot_{i}")
+             base_positions.append(base_pos)
+        base_positions = np.array(base_positions) # Shape: (10, 3)
+
+        # Convert Global Start Positions to Local Frame
+        # Pinocchio assumes base is at (0,0,0), so we must subtract the base offset
+        start_ee_positions_local = start_ee_positions - base_positions
 
 
         init_joint_positions = start_joint_positions.reshape(robots_config.quantities[0], -1)
@@ -162,12 +172,22 @@ def run_simulation():
 
         for joint_positions in trajectory_joint_positions.transpose((1,0,2)):
             sim.set_joint_controls(joint_positions.flatten())
-            sim.forward()
+            # sim.step()
             viewer.sync()
             time.sleep(0.01)
         
         # 1. Get Global Final Positions
-        final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
+        final_ee_positions_global, final_ee_orientations = sim.get_all_ee_positions()
+    
+        # 2. Get Base Positions (to convert Global -> Local)
+        base_positions = []
+        for i in range(robots_config.quantities[0]):
+                base_pos = sim.get_body_position_from_name(f"robot_{i}")
+                base_positions.append(base_pos)
+        base_positions = np.array(base_positions) # Shape: (10, 3)
+
+        # 3. Convert to Local Frame
+        final_ee_positions_local = final_ee_positions_global - base_positions
 
         # 4. Calculate True Error
         # We compare Local Actuals vs Local Targets
@@ -179,8 +199,6 @@ def run_simulation():
 
         while viewer.is_running():
             continue
-    
-    time.sleep(1.0)
 
 def main():
     run_simulation()

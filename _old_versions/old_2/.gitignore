@@ -1,0 +1,5 @@
+**/__pycache__/
+
+scene/**
+
+environments/built_envs/**

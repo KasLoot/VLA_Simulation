@@ -1,0 +1,43 @@
+[
+    {
+        "robot_index": 0,
+        "surface": "desk_1",
+        "surface_position": [
+            0.5,
+            0,
+            0
+        ],
+        "objects": [
+            "cube_1",
+            "cube_3",
+            "cube_2"
+        ],
+        "collision": true
+    },
+    {
+        "robot_index": 1,
+        "surface": "desk_1",
+        "surface_position": [
+            0.5,
+            0,
+            0
+        ],
+        "objects": [
+            "basket_2"
+        ],
+        "collision": true
+    },
+    {
+        "robot_index": 2,
+        "surface": "desk_1",
+        "surface_position": [
+            0.5,
+            0,
+            0
+        ],
+        "objects": [
+            "basket_1"
+        ],
+        "collision": true
+    }
+]

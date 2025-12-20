@@ -1,0 +1,15 @@
+[
+    {
+        "robot_index": 0,
+        "surface": "desk_1",
+        "surface_position": [
+            0.6,
+            0.0,
+            0.0
+        ],
+        "objects": [
+            "basket_2"
+        ],
+        "collision": false
+    }
+]
