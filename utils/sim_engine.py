@@ -57,9 +57,11 @@ class SimEngine():
         self.robot_actuator_indices = np.array(self.robot_actuator_indices, dtype=np.int32)
 
     def reset(self):
+        print("Resetting simulation...")
+        print("Initial joint positions shape:", np.array(self.init_joint_positions).shape)
         mujoco.mj_resetData(self.sim_env, self.data)
+        self.set_joint_controls(np.array(self.init_joint_positions).flatten())
         mujoco.mj_forward(self.sim_env, self.data)
-        self.set_joint_controls(np.array(self.init_joint_positions * self.total_robots).flatten())
 
     def step(self):
         mujoco.mj_step(self.sim_env, self.data)

@@ -29,10 +29,11 @@ class EnvironmentConfig:
 class RobotsConfig:
     names = ["franka_emika_panda"]
     quantities = [10]
-    init_joint_positions = [[0.0]*9]
+    init_joint_positions: list = [[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]]  # Panda default pose
 
 class SimulationConfig:
     time_step: float = 0.01
+    
     # gui_refresh_rate: int = 1
     # physics_steps_per_control_step: int = 10
 
@@ -113,7 +114,7 @@ def run_simulation():
         viewer.cam.elevation = -30 # Angle from horizon
 
         target_object_cartesian_positions = get_target_object_positions(robots_config, sim, scene_data).transpose((1,0,2))
-        target_orientations = robot.euler_angles_to_rotation_matrix(np.array([[0.0, np.pi, 0.0]] * robots_config.quantities[0]))
+        target_orientations = robot.euler_angles_to_rotation_matrix(np.array([[0.0, np.pi/2, 0.0]] * robots_config.quantities[0]))
 
         print(f"Target Positions shape:\n{target_object_cartesian_positions.shape}")
         print(f"Target Orientations shape:\n{target_orientations.shape}")
@@ -125,6 +126,7 @@ def run_simulation():
 
 
         init_joint_positions = start_joint_positions.reshape(robots_config.quantities[0], -1)
+        assert init_joint_positions.all() == np.array(robots_config.init_joint_positions[0]).reshape(robots_config.quantities[0], -1).all(), "Initial joint positions do not match configuration."
         print(f"Start Joint Positions shape: {start_joint_positions.shape}")
 
         target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
@@ -134,7 +136,7 @@ def run_simulation():
                 target_pos=target_pos_input, 
                 target_rot=target_orientations,
                 initial_q=init_joint_positions,
-                maxiter=200
+                maxiter=20
             )
 
         # sim.set_joint_controls(target_joint_positions.flatten())
@@ -176,20 +178,19 @@ def run_simulation():
 
         mes_ee_translation = []
         mes_ee_orientation = []
-        mes_joint_positions = []
+        mes_joint_positions_all = []
 
-        duration = 10.0
+        duration = 20.0
         for t in range(int(duration / sim_config.time_step)):
             mes_joint_positions = sim.get_joint_positions().reshape(robots_config.quantities[0], -1)
             mes_joint_velocities = sim.get_joint_velocities().reshape(robots_config.quantities[0], -1)
+            mes_joint_positions_all.append(mes_joint_positions)
             mes_ee_pos, mes_ee_ori = sim.get_all_ee_local_positions()
             # print(f"mes_joint_positions shape: {mes_joint_positions.shape}, target_joint_positions shape: {target_joint_positions.shape}")
             controls = robot.pd_control(
             target_positions=target_joint_positions, 
             current_positions=mes_joint_positions, 
             current_velocities=mes_joint_velocities,
-            kp=100.0,  # Increased from 1.0 to 500.0 for stiffness
-            kd=40.0    # Increased damping to prevent oscillation
             )
             sim.set_actuator_controls(controls.flatten())
             sim.step()
@@ -206,6 +207,19 @@ def run_simulation():
         print("Final Local EE Positions (Corrected):\n", final_ee_positions_local)
         print("Target Local EE Positions:\n", target_pos_input)
         print("True Position Differences (Local vs Local):\n", diffs)
+
+        # plot joint trajectories for the first robot
+        mes_joint_positions_all = np.array(mes_joint_positions_all)  # Shape: (time_steps, num_robots, num_joints)
+        print(f"Measured Joint Positions All shape: {mes_joint_positions_all.shape}")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for j in range(7): # 7 joints
+            ax.plot(mes_joint_positions_all[:, 0, j], label=f'Joint {j+1}')
+        ax.set_title(f'Robot 0 Joint Trajectories')
+        ax.set_xlabel('Time Step')
+        ax.set_ylabel('Joint Position (rad)')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
 
         while viewer.is_running():
             continue

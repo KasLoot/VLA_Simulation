@@ -16,7 +16,7 @@ class FrankaPandaRobot:
         print(f"self.model.lowerPositionLimit: {self.model.lowerPositionLimit}")
         print(f"self.model.upperPositionLimit: {self.model.upperPositionLimit}")
 
-    def rotation_matrix_to_euler_angles(self, R: np.ndarray[np.ndarray]) -> np.ndarray[np.ndarray]:
+    def rotation_matrix_to_euler_angles(self, R: np.ndarray) -> np.ndarray:
         assert R.shape[-2:] == (3, 3), "Input must be a rotation matrix of shape (..., 3, 3)"
         sy = np.sqrt(R[..., 0, 0] ** 2 + R[..., 1, 0] ** 2)
         singular = sy < 1e-6
@@ -27,7 +27,7 @@ class FrankaPandaRobot:
 
         return np.stack((x, y, z), axis=-1)
     
-    def euler_angles_to_rotation_matrix(self, angles: np.ndarray[np.ndarray]) -> np.ndarray[np.ndarray]:
+    def euler_angles_to_rotation_matrix(self, angles: np.ndarray) -> np.ndarray:
         assert angles.shape[-1] == 3, "Input must be of shape (..., 3) representing Euler angles"
         c = np.cos(angles)
         s = np.sin(angles)
@@ -59,7 +59,7 @@ class FrankaPandaRobot:
         R = np.einsum('...ij,...jk,...kl->...il', R_z, R_y, R_x)
         return R
 
-    def forward_kinematics(self, joint_positions: np.ndarray[np.ndarray]):
+    def forward_kinematics(self, joint_positions: np.ndarray):
         positions = []
         orientations = []
         for q in joint_positions:
@@ -75,18 +75,14 @@ class FrankaPandaRobot:
 
         return position, orientation
 
-
-    def inverse_kinematics(self, target_translation: np.ndarray[np.ndarray], target_orientation: np.ndarray[np.ndarray], qs: np.ndarray[np.ndarray]=None, eps=1e-4, dt=1e-1, damp=1e-6, max_iterations=1000):
+    def inverse_kinematics(self, target_translation: np.ndarray, target_orientation: np.ndarray, qs: np.ndarray=None, eps=1e-4, dt=1e-1, damp=1e-6, max_iterations=1000):
         ee_frame_id = self.model.getFrameId(self.ee_tip_name)
         if qs is None:
             qs = [pin.neutral(self.model)] * target_translation.shape[0]
-            # print(f"qs initialized to neutral positions: {np.array(qs)}")
         success = False
         for i in range(target_translation.shape[0]):
             j = 0
-            # print(f"target_translation[{i}]: {target_translation[i]}, target_orientation[{i}]: {target_orientation[i]}")
             oMdes = pin.SE3(target_orientation[i], target_translation[i])
-            # print(f"oMdes for sample {i}:\n", oMdes)
             while j < max_iterations:
                 pin.forwardKinematics(self.model, self.data, qs[i])
                 pin.updateFramePlacements(self.model, self.data)
@@ -94,9 +90,6 @@ class FrankaPandaRobot:
                 err = pin.log(dMi).vector
                 if norm(err) < eps:
                     success = True
-                    # print(f"IK Convergence achieved for sample {i} in {j} iterations, with error {err}")
-                    # print(f"oMdes:\n", oMdes)
-                    # print(f"dMi:\n", dMi)
                     break
                 if j >= max_iterations:
                     success = False
@@ -104,30 +97,21 @@ class FrankaPandaRobot:
                 J = pin.computeFrameJacobian(self.model, self.data, qs[i], ee_frame_id, pin.LOCAL)
                 
                 # Add a secondary objective to minimize joint changes
-                w = 1e-3  # Weight for the secondary objective
+                w = 1e-3  
                 v = - J.T.dot(solve(J.dot(J.T) + damp * np.eye(6), err))
-                # Null-space projection for the secondary objective
                 v += (np.eye(self.num_joints) - J.T.dot(solve(J.dot(J.T) + damp * np.eye(6), J))).dot(w * (pin.neutral(self.model) - qs[i]))
                 
                 qs[i] = pin.integrate(self.model, qs[i], v*dt)
                 qs[i] = np.clip(qs[i], self.model.lowerPositionLimit, self.model.upperPositionLimit)
-                # if not j % 10:
-                #     print('%d: error = %s' % (j, err.T))
                 j += 1
-        
-        # print("IK Success:", success)
         return qs
     
 
     def inverse_kinematics_position_only(self, target_translation: np.ndarray, qs: np.ndarray=None, eps=1e-4, dt=1e-1, damp=1e-6, max_iterations=1000):
-        """
-        Solves Inverse Kinematics for Position only (x, y, z), ignoring orientation.
-        """
         ee_frame_id = self.model.getFrameId(self.ee_tip_name)
         if qs is None:
             qs = [pin.neutral(self.model)] * target_translation.shape[0]
 
-        # Convert to numpy array if it isn't already, to ensure indexing works
         qs = np.array(qs) 
 
         for i in range(target_translation.shape[0]):
@@ -135,56 +119,31 @@ class FrankaPandaRobot:
             target_pos = target_translation[i]
 
             while j < max_iterations:
-                # 1. Forward Kinematics
                 pin.forwardKinematics(self.model, self.data, qs[i])
                 pin.updateFramePlacements(self.model, self.data)
-                
-                # 2. Get current end-effector position
                 current_pos = self.data.oMf[ee_frame_id].translation
-                
-                # 3. Compute Error (Simple Euclidean difference)
                 err = target_pos - current_pos
                 
                 if norm(err) < eps:
-                    # Success
                     break
                 
-                # 4. Compute Jacobian
                 J = pin.computeFrameJacobian(self.model, self.data, qs[i], ee_frame_id, pin.LOCAL_WORLD_ALIGNED)
-                
-                # 5. Slice Jacobian: We only care about the top 3 rows (Linear Velocity)
                 J_pos = J[:3, :] 
 
-                # 6. Compute Damped Least Squares solution
-                # v = J_pos.T @ (J_pos @ J_pos.T + damp * I)^-1 @ err
-                w = 1e-3 # Secondary task weight
-                
-                # Primary Task: Position
-                # We solve J_pos * dq = err
+                w = 1e-3 
                 v = J_pos.T.dot(solve(J_pos.dot(J_pos.T) + damp * np.eye(3), err))
-                
-                # Secondary Task: Stay close to neutral configuration (Null-space projection)
-                # P = (I - J_pos+ * J_pos)
-                # null_space_motion = P * (q_neutral - q_current)
                 null_space_projector = (np.eye(self.num_joints) - J_pos.T.dot(solve(J_pos.dot(J_pos.T) + damp * np.eye(3), J_pos)))
                 v += null_space_projector.dot(w * (pin.neutral(self.model) - qs[i]))
 
-                # 7. Integrate and Enforce Limits
                 qs[i] = pin.integrate(self.model, qs[i], v * dt)
                 qs[i] = np.clip(qs[i], self.model.lowerPositionLimit, self.model.upperPositionLimit)
-                
                 j += 1
                 
         return qs
 
-
     def inverse_kinematics_optimization(self, target_pos, target_rot=None, initial_q=None, maxiter=500):
-        """
-        Now accepts 'maxiter' as an argument to control solver precision/speed.
-        """
         ee_frame_id = self.model.getFrameId(self.ee_tip_name)
         
-        # ... [Input shape handling code remains the same] ...
         target_pos = np.array(target_pos)
         if target_pos.ndim == 1:
             target_pos = target_pos[None, :]
@@ -228,13 +187,11 @@ class FrankaPandaRobot:
 
                 return 10000.0 * pos_err + 10.0 * rot_err + reg_weight * motion_err + neutral_weight * neutral_err
 
-            # Optimization
             res = minimize(
                 fun=cost_function,
                 x0=prev_q_i, 
                 method='L-BFGS-B',
                 bounds=bounds,
-                # USE THE PASSED MAXITER ARGUMENT HERE
                 options={'ftol': 1e-9, 'gtol': 1e-9, 'disp': False, 'maxiter': maxiter}
             )
             solved_qs[i] = res.x
@@ -242,15 +199,8 @@ class FrankaPandaRobot:
         return solved_qs
 
     def generate_trajectory(self, start_pos, start_rot, target_pos, target_rot, init_joint_positions, num_steps=50, ik_maxiter=500):
-        """
-        Added 'ik_maxiter' argument.
-        """
         n_robots = start_pos.shape[0]
         
-        # ... [Interpolation code (Quintic/Slerp) remains the same] ...
-        # (Copy the interpolation parts from your previous successful version)
-        
-        # Time Parameterization (Quintic)
         t = np.linspace(0, 1, num_steps)
         s = 10 * t**3 - 15 * t**4 + 6 * t**5
         
@@ -264,7 +214,6 @@ class FrankaPandaRobot:
             slerp = Slerp([0, 1], key_rots)
             traj_rot[:, i, :, :] = slerp(t).as_matrix()
 
-        # Solve Inverse Kinematics
         joint_trajectory = np.zeros((n_robots, num_steps, self.num_joints))
         
         joint_trajectory[:, 0, :] = init_joint_positions
@@ -276,12 +225,11 @@ class FrankaPandaRobot:
             step_target_pos = traj_pos[step]
             step_target_rot = traj_rot[step]
             
-            # Pass the hyperparameter down
             solved_qs = self.inverse_kinematics_optimization(
                 target_pos=step_target_pos, 
                 target_rot=step_target_rot,
                 initial_q=current_qs,
-                maxiter=ik_maxiter # <--- Passed here
+                maxiter=ik_maxiter
             )
             
             joint_trajectory[:, step, :] = solved_qs
@@ -290,38 +238,62 @@ class FrankaPandaRobot:
         return joint_trajectory
 
 
-    def pd_control(self, target_positions, current_positions, current_velocities, kp=100.0, kd=20.0):
+    def pd_control(self, target_positions, current_positions, current_velocities, kp=None, kd=None):
         """
-        Updated PD control with proper shape (9,) and reasonable gains.
-        Kp=100, Kd=20 are conservative starting points for torque control.
+        Computes PD control torques with support for joint-specific gains.
+        
+        Args:
+            target_positions: (n_robots, 9)
+            current_positions: (n_robots, 9)
+            current_velocities: (n_robots, 9)
+            kp: Scalar or Array (7,) for proportional gains. 
+                Defaults to [100, 100, 100, 100, 50, 50, 10]
+            kd: Scalar or Array (7,) for derivative gains.
+                Defaults to [10, 10, 10, 10, 5, 5, 2]
         """
         n_robots = current_positions.shape[0]
-        # Change shape to (n_robots, 9) to match actuator count (7 arm + 2 fingers)
         control_signals = np.zeros((n_robots, 9)) 
+
+        # --- Handle Gains ---
+        # If None, use tuned default profile for Franka Panda
+        if kp is None:
+            kp = np.array([100.0, 100.0, 100.0, 100.0, 50.0, 50.0, 10.0])
+        elif np.isscalar(kp):
+            kp = np.full(7, kp)
+        else:
+            kp = np.array(kp)
+
+        if kd is None:
+            kd = np.array([10.0, 50.0, 10.0, 10.0, 5.0, 5.0, 2.0])
+            # kd = np.array([10.0, 10.0, 10.0, 10.0, 5.0, 5.0, 2.0])
+        elif np.isscalar(kd):
+            kd = np.full(7, kd)
+        else:
+            kd = np.array(kd)
+        
+        # --------------------
         
         for i in range(n_robots):
             q = current_positions[i]  # Shape (9,)
             v = current_velocities[i]
             q_des = target_positions[i]
             
-            # 1. Compute Gravity (This calculates the torque to hold the robot static)
+            # 1. Compute Gravity Compensation
             pin.computeGeneralizedGravity(self.model, self.data, q)
             g = self.data.g  # Shape (9,)
             
-            # 2. Extract Arm Components
+            # 2. Extract Arm Components (First 7 Joints)
             q_arm = q[:7]
             v_arm = v[:7]
             q_des_arm = q_des[:7]
             g_arm = g[:7]
             
-            # 3. PD Control Law for Arm
-            # Note: Do not clamp this to [0,1]. Torques need to be ~20-50 Nm.
+            # 3. PD Control Law for Arm (Broadcasting happens here automatically)
+            # kp shape (7,) * difference shape (7,) -> (7,)
             tau_arm = g_arm + kp * (q_des_arm - q_arm) + kd * (0 - v_arm)
             
             # 4. Fill control signals
             control_signals[i, :7] = tau_arm
-            # Fingers (indices 7,8) are left as 0.0 or you can add logic to close them here
+            # Fingers (indices 7,8) are left as 0.0 or handled separately if needed
             
         return control_signals
-
-
