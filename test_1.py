@@ -1,64 +1,120 @@
-import mujoco as mj
-import mujoco.viewer
-import time
-import numpy as np
-import os
-from pathlib import Path
-import xml.etree.ElementTree as ET
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 
 
 
-from utils.scene_generator import SceneGenerator
-from utils.objects import ObjectLibrary
-from utils.env_builder import EnvironmentBuilder
+class SimpleModel(nn.Module):
+    def __init__(self, input_size=12, hidden_size=128, output_size=6):
+        super(SimpleModel, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, output_size)
+
+        self.rms1 = nn.RMSNorm(hidden_size)
+        self.rms2 = nn.RMSNorm(hidden_size)
+        self.rms3 = nn.RMSNorm(hidden_size)
+
+        self.log_std = nn.Parameter(torch.zeros(output_size))
 
 
-class EnvironmentConfig:
-    row_spacing = 1.5 # Increased spacing for desks
-    column_spacing = 1.5
-    maximum_robots_per_row = 4
-    env_template_path = "environments/templets/env_temp_1.xml"
-    seed = 20
-
-class RobotsConfig:
-    names = ["franka_emika_panda"]
-    quantities = [10]
-    init_joint_positions = [[0.0]*9]
-
-class SimulationConfig:
-    time_step: float = 0.01
+    def forward(self, x):
+        x = F.silu(self.rms1(self.fc1(x)))
+        x = F.silu(self.rms2(self.fc2(x)))
+        x = F.silu(self.rms3(self.fc3(x)))
+        x = self.fc4(x)
+        return x, self.log_std.exp()
 
 
-robots_config = RobotsConfig()
-robot_xml_paths = [os.path.join(Path(__file__).parent.resolve(),"robot_models", robot_name, "robot.xml") for robot_name in robots_config.names]
-print(robot_xml_paths)
+def get_reward(state: torch.Tensor, target: torch.Tensor):
+    """
+    state: (batch_size, seq_len, state_size)
+    target: (batch_size, state_size)
 
-env_config = EnvironmentConfig()
-xml_path = os.path.join(Path(__file__).parent, env_config.env_template_path)
-print(xml_path)
+    returns:
+    reward: (batch_size, seq_len - 1, state_size)
+    """
 
-scene_json_path = os.path.join(Path(__file__).parent, "scene", "pick_and_place_scene.json")
-scene_generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0], seed=42)
-scene_generator.generate_scene(task="pick_and_place", surface_position=[0.5, 0, 0], min_objects=1, max_objects=3)
+    state_all = state[:, :-1, :]
+    action_all = state[:, 1:, :]
 
-objects_dir = os.path.join(Path(__file__).parent, "objects")
-builder = EnvironmentBuilder(robot_xml_paths[0], 
-                                 xml_path, 
-                                 robots_config, 
-                                 env_config, 
-                                 scene_json_path=scene_json_path, 
-                                 objects_dir=objects_dir,
-                                 seed=env_config.seed)
-env_tree = builder.build(save_path="environments/built_envs/built_environment.xml")
+    action_diff = torch.norm(action_all - state_all, dim=-1)
+    target_diff = torch.norm(target.unsqueeze(1) - state_all, dim=-1)
+    # print(f"state_all shape: {state_all.shape}")
+    # print(f"action_all shape: {action_all.shape}")
+    # print(f"action_diff shape: {action_diff.shape}")
+    # print(f"target_diff shape: {target_diff.shape}")
 
-env_tree = ET.tostring(env_tree, encoding='unicode')
-model = mj.MjModel.from_xml_string(env_tree)
-data = mj.MjData(model)
+    schedule = torch.linspace(0, 1, steps=state_all.size(1)).to(state.device).exp() - 1.0
+    schedule = schedule / schedule.max()
+    # print(f"schedule.shape: {schedule.shape}")
 
-with mujoco.viewer.launch_passive(model, data) as viewer:
-    while viewer.is_running():
-        viewer.sync()
-        time.sleep(0.01)
+    target_reward = -target_diff * schedule
+    # print(f"target_reward.shape: {target_reward.shape}")
+
+    action_reward = -torch.abs(action_diff) * 0.1
+    # print(f"action_reward.shape: {action_reward.shape}")
+    
+    reward = target_reward + action_reward
+
+    return reward
 
 
-time.sleep(2)
+
+def rl_train():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
+    model = SimpleModel().to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001)
+
+
+
+    for epoch in range(1):
+        state = torch.randn(32, 6).to(device)
+        target = torch.randn(32, 6).to(device)
+        state_all = []
+        log_probs_all = []
+        reward_all = []
+        state_all.append(state)
+
+        for step in range(100):
+            model.train()
+
+            input_state = torch.cat([state, target], dim=-1)
+
+            action_mean, action_std = model(input_state)
+            dist = torch.distributions.Normal(action_mean, action_std)
+            actions = dist.rsample()
+            state_all.append(actions)
+            state = actions.detach()
+
+            log_probs = dist.log_prob(actions).sum(-1)
+            log_probs_all.append(log_probs)
+
+        state_all = torch.stack(state_all, dim=1)
+        log_probs_all = torch.stack(log_probs_all, dim=1)
+        print(f"state_all shape after stacking: {state_all.shape}")
+        print(f"log_probs_all shape after stacking: {log_probs_all.shape}")
+
+        reward = get_reward(state_all, target)
+        print(f"reward shape: {reward.shape}")
+
+        total_return = reward.sum(dim=1)
+        print(f"total_return shape: {total_return.shape}")
+
+        loss = - (log_probs_all * total_return.unsqueeze(-1).detach()).mean()
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
+
+
+
+
+
+if __name__ == "__main__":
+    rl_train()

@@ -18,6 +18,16 @@ from utils.robots import FrankaPandaRobot
 
 import matplotlib.pyplot as plt
 
+from test_1 import SimpleModel, get_reward
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+
+
+
+
+
 
 class EnvironmentConfig:
     row_spacing = 1.5 # Increased spacing for desks
@@ -102,7 +112,6 @@ def run_simulation():
 
     sim_config = SimulationConfig()
     sim = SimEngine(sim_env=sim_env, sim_config=sim_config, robots_config=robots_config)
-    sim.reset()
 
     with mujoco.viewer.launch_passive(sim.sim_env, sim.data) as viewer:
         viewer.sync()
@@ -113,7 +122,7 @@ def run_simulation():
         viewer.cam.elevation = -30 # Angle from horizon
 
         target_object_cartesian_positions = get_target_object_positions(robots_config, sim, scene_data).transpose((1,0,2))
-        target_orientations = robot.euler_angles_to_rotation_matrix(np.array([[0.0, np.pi, 0.0]] * robots_config.quantities[0]))
+        target_orientations = robot.euler_angles_to_rotation_matrix(np.array([[0.0, np.pi/2, 0.0]] * robots_config.quantities[0]))
 
         print(f"Target Positions shape:\n{target_object_cartesian_positions.shape}")
         print(f"Target Orientations shape:\n{target_orientations.shape}")
@@ -125,46 +134,92 @@ def run_simulation():
 
 
         init_joint_positions = start_joint_positions.reshape(robots_config.quantities[0], -1)
+        assert init_joint_positions.all() == np.array(robots_config.init_joint_positions[0]).reshape(robots_config.quantities[0], -1).all(), "Initial joint positions do not match configuration."
         print(f"Start Joint Positions shape: {start_joint_positions.shape}")
 
         target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
         print(f"Target Position Input:\n {target_pos_input}")
 
-        trajectory_joint_positions = robot.generate_trajectory(
-            start_pos=start_ee_positions_local, 
-            start_rot=start_ee_orientations, 
-            target_pos=target_pos_input, # Use the specific object target
-            target_rot=target_orientations,
-            init_joint_positions=init_joint_positions,
-            num_steps=200,
-            ik_maxiter=10
-        )
+        # trajectory_joint_positions = robot.generate_trajectory(
+        #     start_pos=start_ee_positions_local, 
+        #     start_rot=start_ee_orientations, 
+        #     target_pos=target_pos_input, # Use the specific object target
+        #     target_rot=target_orientations,
+        #     init_joint_positions=init_joint_positions,
+        #     num_steps=200,
+        #     ik_maxiter=10
+        # )
 
-        print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
+        # print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
 
-        # plot joint trajectories for each robot in separate subplots, 4 colomns
-        num_robots = robots_config.quantities[0]
-        num_cols = 4
-        num_rows = (num_robots + num_cols - 1) // num_cols
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
-        for i in range(num_robots):
-            row = i // num_cols
-            col = i % num_cols
-            ax = axs[row, col] if num_rows > 1 else axs[col]
-            for j in range(7): # 7 joints
-                ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
-            ax.set_title(f'Robot {i} Joint Trajectories')
-            ax.set_xlabel('Time Step')
-            ax.set_ylabel('Joint Position (rad)')
-            ax.legend()
-        plt.tight_layout()
-        plt.show()
+        # # plot joint trajectories for each robot in separate subplots, 4 colomns
+        # num_robots = robots_config.quantities[0]
+        # num_cols = 4
+        # num_rows = (num_robots + num_cols - 1) // num_cols
+        # fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
+        # for i in range(num_robots):
+        #     row = i // num_cols
+        #     col = i % num_cols
+        #     ax = axs[row, col] if num_rows > 1 else axs[col]
+        #     for j in range(7): # 7 joints
+        #         ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
+        #     ax.set_title(f'Robot {i} Joint Trajectories')
+        #     ax.set_xlabel('Time Step')
+        #     ax.set_ylabel('Joint Position (rad)')
+        #     ax.legend()
+        # plt.tight_layout()
+        # plt.show()
 
-        for joint_positions in trajectory_joint_positions.transpose((1,0,2)):
-            sim.set_joint_controls(joint_positions.flatten())
-            sim.forward()
-            viewer.sync()
-            time.sleep(0.01)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print("Using device:", device)
+        model = SimpleModel().to(device).train()
+        optimizer = optim.AdamW(model.parameters(), lr=0.001)
+        state = torch.tensor(start_joint_positions, dtype=torch.float32).to(device)
+        target = torch.tensor(target_pos_input, dtype=torch.float32).to(device)
+        state_all = []
+        log_probs_all = []
+        reward_all = []
+        state_all.append(state)
+
+        for epoch in range(1):
+
+            for step in range(200):
+                
+                input_state = torch.cat([state, target], dim=-1)
+
+                action_mean, action_std = model(input_state)
+                dist = torch.distributions.Normal(action_mean, action_std)
+                actions = dist.rsample()
+                state_all.append(actions)
+                state = actions.detach()
+
+                log_probs = dist.log_prob(actions).sum(-1)
+                log_probs_all.append(log_probs)
+
+
+                sim.set_joint_controls(state.cpu().numpy().flatten())
+                sim.forward()
+                viewer.sync()
+                time.sleep(0.01)
+            
+            state_all = torch.stack(state_all, dim=1)
+            log_probs_all = torch.stack(log_probs_all, dim=1)
+            print(f"state_all shape after stacking: {state_all.shape}")
+            print(f"log_probs_all shape after stacking: {log_probs_all.shape}")
+
+            reward = get_reward(state_all, target)
+            print(f"reward shape: {reward.shape}")
+
+            total_return = reward.sum(dim=1)
+            print(f"total_return shape: {total_return.shape}")
+
+            loss = - (log_probs_all * total_return.unsqueeze(-1).detach()).mean()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
         
         # 1. Get Global Final Positions
         final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
