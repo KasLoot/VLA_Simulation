@@ -1,4 +1,4 @@
-<body name="basket_1" class="object">
+<!-- <body name="basket_1" class="object">
     <freejoint/>
     <geom name="basket_geom1"
             type="cylinder"
@@ -16,4 +16,4 @@
             rgba="0.6 0.4 0.2 1"
             density="1000"
             friction="1 0.1 0.002"/>
-</body>
+</body> -->

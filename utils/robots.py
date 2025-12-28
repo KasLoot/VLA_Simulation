@@ -141,7 +141,19 @@ class FrankaPandaRobot:
                 
         return qs
 
-    def inverse_kinematics_optimization(self, target_pos, target_rot=None, initial_q=None, maxiter=500):
+    def inverse_kinematics_optimization(
+        self,
+        target_pos,
+        target_rot=None,
+        initial_q=None,
+        maxiter=500,
+        *,
+        pos_weight: float = 10000.0,
+        rot_weight: float = 10.0,
+        motion_weight: float = 1.0,
+        neutral_weight: float = 0.001,
+        max_step=None,
+    ):
         ee_frame_id = self.model.getFrameId(self.ee_tip_name)
         
         target_pos = np.array(target_pos)
@@ -158,12 +170,41 @@ class FrankaPandaRobot:
             initial_q = np.array(initial_q)
 
         solved_qs = np.zeros_like(initial_q)
-        bounds = [(l, u) for l, u in zip(self.model.lowerPositionLimit, self.model.upperPositionLimit)]
+        base_bounds = [(l, u) for l, u in zip(self.model.lowerPositionLimit, self.model.upperPositionLimit)]
+
+        # Optional per-step trust region on joint changes to prevent IK branch flips.
+        # max_step can be:
+        #   - None: no additional constraint
+        #   - scalar: same +/- bound for all joints
+        #   - array-like (nv,): per-joint +/- bound
+        if max_step is None:
+            max_step_vec = None
+        else:
+            max_step_vec = np.asarray(max_step, dtype=float)
+            if max_step_vec.ndim == 0:
+                max_step_vec = np.full(self.num_joints, float(max_step_vec))
+            if max_step_vec.shape != (self.num_joints,):
+                raise ValueError(
+                    f"max_step must be None, scalar, or shape ({self.num_joints},), got {max_step_vec.shape}"
+                )
 
         for i in range(n_robots):
             tgt_pos_i = target_pos[i]
             tgt_rot_i = target_rot[i] if target_rot is not None else None
             prev_q_i = initial_q[i]
+
+            if max_step_vec is None:
+                bounds_i = base_bounds
+            else:
+                # Clamp joint i within a band around previous solution, respecting joint limits.
+                bounds_i = []
+                for j, (l, u) in enumerate(base_bounds):
+                    lo = max(l, prev_q_i[j] - max_step_vec[j])
+                    hi = min(u, prev_q_i[j] + max_step_vec[j])
+                    # Ensure bounds are valid; if not, fall back to base bounds for that joint.
+                    if lo > hi:
+                        lo, hi = l, u
+                    bounds_i.append((lo, hi))
 
             def cost_function(q):
                 pin.forwardKinematics(self.model, self.data, q)
@@ -179,26 +220,44 @@ class FrankaPandaRobot:
                     diff = pin.log(pin.SE3(curr_rot.T @ tgt_rot_i, np.zeros(3))).vector
                     rot_err = np.sum(diff**2)
 
-                reg_weight = 0.001 
                 motion_err = np.sum((q - prev_q_i)**2)
                 
-                neutral_weight = 0.001
                 neutral_err = np.sum((q - pin.neutral(self.model))**2)
 
-                return 10000.0 * pos_err + 10.0 * rot_err + reg_weight * motion_err + neutral_weight * neutral_err
+                return (
+                    float(pos_weight) * pos_err
+                    + float(rot_weight) * rot_err
+                    + float(motion_weight) * motion_err
+                    + float(neutral_weight) * neutral_err
+                )
 
             res = minimize(
                 fun=cost_function,
                 x0=prev_q_i, 
                 method='L-BFGS-B',
-                bounds=bounds,
+                bounds=bounds_i,
                 options={'ftol': 1e-9, 'gtol': 1e-9, 'disp': False, 'maxiter': maxiter}
             )
             solved_qs[i] = res.x
 
         return solved_qs
 
-    def generate_trajectory(self, start_pos, start_rot, target_pos, target_rot, init_joint_positions, num_steps=50, ik_maxiter=500):
+    def generate_trajectory(
+        self,
+        start_pos,
+        start_rot,
+        target_pos,
+        target_rot,
+        init_joint_positions,
+        num_steps=50,
+        ik_maxiter=500,
+        *,
+        max_joint_step=None,
+        motion_weight: float = 1.0,
+        neutral_weight: float = 0.001,
+        pos_weight: float = 10000.0,
+        rot_weight: float = 10.0,
+    ):
         n_robots = start_pos.shape[0]
         
         t = np.linspace(0, 1, num_steps)
@@ -219,7 +278,10 @@ class FrankaPandaRobot:
         joint_trajectory[:, 0, :] = init_joint_positions
         current_qs = init_joint_positions.copy()
 
-        print(f"Generating trajectory with IK maxiter={ik_maxiter}...")
+        print(
+            f"Generating trajectory with IK maxiter={ik_maxiter}, "
+            f"max_joint_step={max_joint_step}, motion_weight={motion_weight}..."
+        )
         
         for step in range(1, num_steps):
             step_target_pos = traj_pos[step]
@@ -229,7 +291,12 @@ class FrankaPandaRobot:
                 target_pos=step_target_pos, 
                 target_rot=step_target_rot,
                 initial_q=current_qs,
-                maxiter=ik_maxiter
+                maxiter=ik_maxiter,
+                pos_weight=pos_weight,
+                rot_weight=rot_weight,
+                motion_weight=motion_weight,
+                neutral_weight=neutral_weight,
+                max_step=max_joint_step,
             )
             
             joint_trajectory[:, step, :] = solved_qs
@@ -297,3 +364,131 @@ class FrankaPandaRobot:
             # Fingers (indices 7,8) are left as 0.0 or handled separately if needed
             
         return control_signals
+
+
+    def feedback_lin_ctrl(
+        self,
+        current_positions: np.ndarray,
+        current_velocities: np.ndarray,
+        target_positions: np.ndarray,
+        target_velocities: np.ndarray | None = None,
+        kp: float | np.ndarray | None = None,
+        kd: float | np.ndarray | None = None,
+        finger_mode: str = "position",
+    ) -> np.ndarray:
+        """
+        Computed-torque / feedback-linearization controller using Pinocchio dynamics.
+
+        This is designed to plug directly into the MuJoCo actuator interface used by
+        `SimEngine.set_actuator_controls(...)`:
+        - Arm (first 7 actuators): torque control
+        - Fingers (last 2 actuators): typically position control in this project
+
+        Args:
+            current_positions: (n_robots, 9)
+            current_velocities: (n_robots, 9)
+            target_positions: (n_robots, 9)
+            target_velocities: (n_robots, 9) or None (defaults to zeros)
+            kp: scalar or array-like (7,) for arm joints. If None uses a stable default.
+            kd: scalar or array-like (7,) for arm joints. If None uses a stable default.
+            finger_mode: "position" (default) sets finger actuators to desired positions.
+                         "hold" sets finger actuators to current positions.
+                         "zero" sets finger actuators to 0.
+
+        Returns:
+            controls: (n_robots, 9) where controls[:, :7] are torques and
+                      controls[:, 7:9] are finger actuator commands.
+
+        Control law (arm joints):
+        $$\tau = M(q)\,u + n(q,\dot{q})$$
+        where $u = K_p(q_d - q) + K_d(\dot{q}_d - \dot{q})$.
+        """
+
+        q = np.asarray(current_positions)
+        qd = np.asarray(current_velocities)
+        q_des = np.asarray(target_positions)
+
+        if q.ndim == 1:
+            q = q[None, :]
+        if qd.ndim == 1:
+            qd = qd[None, :]
+        if q_des.ndim == 1:
+            q_des = q_des[None, :]
+
+        if q.shape != qd.shape or q.shape != q_des.shape:
+            raise ValueError(
+                f"Shape mismatch: q={q.shape}, qd={qd.shape}, q_des={q_des.shape} (expected all equal)"
+            )
+        if q.shape[1] != self.num_joints:
+            raise ValueError(
+                f"Expected joint dimension {self.num_joints}, got {q.shape[1]}"
+            )
+
+        if target_velocities is None:
+            qd_des = np.zeros_like(q)
+        else:
+            qd_des = np.asarray(target_velocities)
+            if qd_des.ndim == 1:
+                qd_des = qd_des[None, :]
+            if qd_des.shape != q.shape:
+                raise ValueError(
+                    f"Shape mismatch: qd_des={qd_des.shape} vs q={q.shape}"
+                )
+
+        # Gains for the 7 arm joints (fingers handled separately)
+        if kp is None:
+            kp_vec = np.array([200.0, 200.0, 200.0, 200.0, 80.0, 80.0, 30.0], dtype=float)
+        elif np.isscalar(kp):
+            kp_vec = np.full(7, float(kp))
+        else:
+            kp_vec = np.asarray(kp, dtype=float).reshape(-1)
+            if kp_vec.size != 7:
+                raise ValueError(f"kp must be a scalar or shape (7,), got {kp_vec.shape}")
+
+        if kd is None:
+            kd_vec = np.array([30.0, 30.0, 30.0, 30.0, 15.0, 15.0, 8.0], dtype=float)
+        elif np.isscalar(kd):
+            kd_vec = np.full(7, float(kd))
+        else:
+            kd_vec = np.asarray(kd, dtype=float).reshape(-1)
+            if kd_vec.size != 7:
+                raise ValueError(f"kd must be a scalar or shape (7,), got {kd_vec.shape}")
+
+        n_robots = q.shape[0]
+        controls = np.zeros((n_robots, self.num_joints), dtype=float)
+
+        for i in range(n_robots):
+            qi = q[i]
+            qdi = qd[i]
+            q_des_i = q_des[i]
+            qd_des_i = qd_des[i]
+
+            # Desired accel-like command u (only arm)
+            pos_err_arm = q_des_i[:7] - qi[:7]
+            vel_err_arm = qd_des_i[:7] - qdi[:7]
+            u = np.zeros(self.num_joints, dtype=float)
+            u[:7] = kp_vec * pos_err_arm + kd_vec * vel_err_arm
+
+            # Dynamics: M(q) and nonlinear effects nle(q, qd)
+            pin.computeAllTerms(self.model, self.data, qi, qdi)
+            M = np.array(self.data.M)
+            nle = np.array(self.data.nle)
+
+            tau = M @ u + nle
+
+            # Arm torques
+            controls[i, :7] = tau[:7]
+
+            # Fingers: project-specific actuator type is position, so send positions.
+            if finger_mode == "position":
+                controls[i, 7:9] = q_des_i[7:9]
+            elif finger_mode == "hold":
+                controls[i, 7:9] = qi[7:9]
+            elif finger_mode == "zero":
+                controls[i, 7:9] = 0.0
+            else:
+                raise ValueError(
+                    f"Unknown finger_mode={finger_mode!r} (expected 'position', 'hold', or 'zero')"
+                )
+
+        return controls

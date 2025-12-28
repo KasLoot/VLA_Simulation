@@ -17,7 +17,7 @@ class SimpleModel(nn.Module):
         self.rms2 = nn.RMSNorm(hidden_size)
         self.rms3 = nn.RMSNorm(hidden_size)
 
-        self.log_std = nn.Parameter(torch.zeros(output_size))
+        self.log_std = nn.Parameter(torch.ones(output_size)*-1.0)
 
 
     def forward(self, x):
@@ -25,7 +25,10 @@ class SimpleModel(nn.Module):
         x = F.silu(self.rms2(self.fc2(x)))
         x = F.silu(self.rms3(self.fc3(x)))
         x = self.fc4(x)
-        return x, self.log_std.exp()
+
+        mean = F.tanh(x)  # Assuming action space is between -1 and 1
+
+        return mean, self.log_std.exp()
 
 
 def get_reward(state: torch.Tensor, target: torch.Tensor):
@@ -37,84 +40,34 @@ def get_reward(state: torch.Tensor, target: torch.Tensor):
     reward: (batch_size, seq_len - 1, state_size)
     """
 
+    # schedule = torch.linspace(0, 1, steps=state.size(1)).to(state.device).exp() - 1.0
+    # schedule = schedule / schedule.max()
+    
+
+    # 1. Calculate distance for ALL states (from t=0 to t=200)
+    # Shape: (batch, 201)
+    all_dists = torch.norm(target.unsqueeze(1) - state, dim=-1)
+    
+    # 2. Define Previous and Next distances aligned by time step
+    # dist_prev: Distances at t=0, 1, ..., 199 (Shape: batch, 200)
+    dist_prev = all_dists[:, :-1]
+    # dist_curr: Distances at t=1, 2, ..., 200 (Shape: batch, 200)
+    dist_curr = all_dists[:, 1:]
+
+    # 3. Calculate Improvement (Shape: batch, 200)
+    # This now perfectly matches the shape of your other rewards
+    improvement = dist_prev - dist_curr 
+    progress_reward = improvement * 10.0
+
+    # 4. Other Rewards (Using dist_prev to match your original logic of rewarding state_t)
     state_all = state[:, :-1, :]
     action_all = state[:, 1:, :]
-
     action_diff = torch.norm(action_all - state_all, dim=-1)
-    target_diff = torch.norm(target.unsqueeze(1) - state_all, dim=-1)
-    # print(f"state_all shape: {state_all.shape}")
-    # print(f"action_all shape: {action_all.shape}")
-    # print(f"action_diff shape: {action_diff.shape}")
-    # print(f"target_diff shape: {target_diff.shape}")
-
-    schedule = torch.linspace(0, 1, steps=state_all.size(1)).to(state.device).exp() - 1.0
-    schedule = schedule / schedule.max()
-    # print(f"schedule.shape: {schedule.shape}")
-
-    target_reward = -target_diff * schedule
-    # print(f"target_reward.shape: {target_reward.shape}")
-
-    action_reward = -torch.abs(action_diff) * 0.1
-    # print(f"action_reward.shape: {action_reward.shape}")
     
-    reward = target_reward + action_reward
+    target_reward = -torch.clamp(dist_prev, max=2.0)
+    action_reward = -torch.abs(action_diff) * 0.01
+
+    reward = target_reward + action_reward + progress_reward
 
     return reward
 
-
-
-def rl_train():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device:", device)
-    model = SimpleModel().to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=0.001)
-
-
-
-    for epoch in range(1):
-        state = torch.randn(32, 6).to(device)
-        target = torch.randn(32, 6).to(device)
-        state_all = []
-        log_probs_all = []
-        reward_all = []
-        state_all.append(state)
-
-        for step in range(100):
-            model.train()
-
-            input_state = torch.cat([state, target], dim=-1)
-
-            action_mean, action_std = model(input_state)
-            dist = torch.distributions.Normal(action_mean, action_std)
-            actions = dist.rsample()
-            state_all.append(actions)
-            state = actions.detach()
-
-            log_probs = dist.log_prob(actions).sum(-1)
-            log_probs_all.append(log_probs)
-
-        state_all = torch.stack(state_all, dim=1)
-        log_probs_all = torch.stack(log_probs_all, dim=1)
-        print(f"state_all shape after stacking: {state_all.shape}")
-        print(f"log_probs_all shape after stacking: {log_probs_all.shape}")
-
-        reward = get_reward(state_all, target)
-        print(f"reward shape: {reward.shape}")
-
-        total_return = reward.sum(dim=1)
-        print(f"total_return shape: {total_return.shape}")
-
-        loss = - (log_probs_all * total_return.unsqueeze(-1).detach()).mean()
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        print(f"Epoch {epoch}, Loss: {loss.item():.4f}")
-
-
-
-
-
-if __name__ == "__main__":
-    rl_train()

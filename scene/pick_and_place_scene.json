@@ -8,7 +8,7 @@
             0.0
         ],
         "objects": [
-            "basket_2"
+            "cube_1"
         ],
         "collision": false
     },
@@ -21,7 +21,7 @@
             0.0
         ],
         "objects": [
-            "basket_1"
+            "cube_1"
         ],
         "collision": false
     },
@@ -34,7 +34,7 @@
             0.0
         ],
         "objects": [
-            "cube_4"
+            "cube_1"
         ],
         "collision": false
     },
@@ -47,7 +47,7 @@
             0.0
         ],
         "objects": [
-            "cube_1"
+            "cube_3"
         ],
         "collision": false
     },
@@ -73,7 +73,7 @@
             0.0
         ],
         "objects": [
-            "cube_2"
+            "cube_3"
         ],
         "collision": false
     },
@@ -86,7 +86,7 @@
             0.0
         ],
         "objects": [
-            "basket_2"
+            "cube_4"
         ],
         "collision": false
     },
@@ -112,7 +112,7 @@
             0.0
         ],
         "objects": [
-            "cube_4"
+            "cube_2"
         ],
         "collision": false
     },
@@ -125,7 +125,7 @@
             0.0
         ],
         "objects": [
-            "basket_1"
+            "cube_1"
         ],
         "collision": false
     }
