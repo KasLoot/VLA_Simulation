@@ -58,7 +58,7 @@ class SimEngine():
 
     def reset(self):
         print("Resetting simulation...")
-        print("Initial joint positions shape:", np.array(self.init_joint_positions).shape)
+        # print("Initial joint positions shape:", np.array(self.init_joint_positions).shape)
         mujoco.mj_resetData(self.sim_env, self.data)
         self.set_joint_controls(np.array(self.init_joint_positions).flatten())
         mujoco.mj_forward(self.sim_env, self.data)

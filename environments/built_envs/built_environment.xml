@@ -207,13 +207,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_0/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_0/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_0/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_0/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_0/basket_2" pos="0.640563967617452 0.01862541570267026 0.6709999999999999">
+    <body name="robot_0/cube_1" pos="0.6162255870469808 0.06332641338907888 0.531">
       <freejoint />
-      <geom name="robot_0/basket_geom2" type="cylinder" size="0.15 0.07" rgba="0.6 0.4 0.2 1" density="1000" friction="1 0.1 0.002" contype="2" conaffinity="2" />
+      <geom name="robot_0/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_1" pos="1.5 0.0 0">
       <body name="robot_1/link_0">
@@ -340,13 +340,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_1/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_1/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_1/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_1/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_1/basket_1" pos="2.153301851272529 0.08092324756265472 0.651">
+    <body name="robot_1/cube_1" pos="2.1106603702545055 0.13756952085651303 0.531">
       <freejoint />
-      <geom name="robot_1/basket_geom1" type="cylinder" size="0.1 0.05" rgba="0.8 0.6 0.4 1" density="1000" friction="1 0.1 0.002" contype="2" conaffinity="2" />
+      <geom name="robot_1/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_2" pos="3.0 0.0 0">
       <body name="robot_2/link_0">
@@ -473,13 +473,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_2/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_2/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_2/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_2/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_2/cube_4" pos="3.518341332146252 0.04614679566603633 0.631">
+    <body name="robot_2/cube_1" pos="3.5903930978995593 0.04614679566603633 0.531">
       <freejoint />
-      <geom name="robot_2/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" contype="2" conaffinity="2" />
+      <geom name="robot_2/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_3" pos="4.5 0.0 0">
       <body name="robot_3/link_0">
@@ -606,13 +606,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_3/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_3/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_3/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_3/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_3/cube_1" pos="5.237681536186603 0.1265243271837016 0.631">
+    <body name="robot_3/cube_3" pos="5.116197827786659 0.1265243271837016 0.531">
       <freejoint />
-      <geom name="robot_3/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" contype="2" conaffinity="2" />
+      <geom name="robot_3/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_4" pos="0.0 1.5 0">
       <body name="robot_4/link_0">
@@ -739,11 +739,11 @@
           </body>
         </body>
       </body>
-      <body name="robot_4/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_4/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_4/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_4/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_4/cube_4" pos="0.6247998275447354 1.3875885496226938 0.631">
+    <body name="robot_4/cube_4" pos="0.6029176267699689 1.3875885496226938 0.531">
       <freejoint />
       <geom name="robot_4/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" contype="2" conaffinity="2" />
     </body>
@@ -872,13 +872,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_5/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_5/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_5/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_5/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_5/cube_2" pos="2.0699178410939254 1.667904924344292 0.631">
+    <body name="robot_5/cube_3" pos="2.096460922481638 1.667904924344292 0.531">
       <freejoint />
-      <geom name="robot_5/block_geom2" type="box" size="0.03 0.03 0.03" rgba="1 0 0 1" density="500" contype="2" conaffinity="2" />
+      <geom name="robot_5/block_geom3" type="box" size="0.03 0.03 0.03" rgba="0 1 0 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_6" pos="3.0 1.5 0">
       <body name="robot_6/link_0">
@@ -1005,13 +1005,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_6/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_6/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_6/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_6/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_6/basket_2" pos="3.560324779991118 1.481913914884929 0.6709999999999999">
+    <body name="robot_6/cube_4" pos="3.584129911996447 1.4385073106087585 0.531">
       <freejoint />
-      <geom name="robot_6/basket_geom2" type="cylinder" size="0.15 0.07" rgba="0.6 0.4 0.2 1" density="1000" friction="1 0.1 0.002" contype="2" conaffinity="2" />
+      <geom name="robot_6/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_7" pos="4.5 1.5 0">
       <body name="robot_7/link_0">
@@ -1138,11 +1138,11 @@
           </body>
         </body>
       </body>
-      <body name="robot_7/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_7/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_7/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_7/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_7/cube_4" pos="5.25301329670419 1.4827962569897906 0.631">
+    <body name="robot_7/cube_4" pos="5.11800156431814 1.4827962569897906 0.531">
       <freejoint />
       <geom name="robot_7/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" contype="2" conaffinity="2" />
     </body>
@@ -1271,13 +1271,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_8/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_8/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_8/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_8/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_8/cube_4" pos="0.5009418745930306 2.9377473543035015 0.631">
+    <body name="robot_8/cube_2" pos="0.5883461028932977 2.9377473543035015 0.531">
       <freejoint />
-      <geom name="robot_8/block_geom4" type="box" size="0.03 0.03 0.03" rgba="1 1 0 1" density="500" contype="2" conaffinity="2" />
+      <geom name="robot_8/block_geom2" type="box" size="0.03 0.03 0.03" rgba="1 0 0 1" density="500" contype="2" conaffinity="2" />
     </body>
     <body name="robot_9" pos="1.5 3.0 0">
       <body name="robot_9/link_0">
@@ -1404,13 +1404,13 @@
           </body>
         </body>
       </body>
-      <body name="robot_9/desk_1" pos="0.6 0.0 0.3">
-        <geom name="robot_9/desk_geom" type="box" size="0.25 0.25 0.3" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
+      <body name="robot_9/desk_1" pos="0.6 0.0 0.25">
+        <geom name="robot_9/desk_geom" type="box" size="0.1 0.25 0.25" rgba="0.7 0.5 0.3 0.4" contype="2" conaffinity="2" />
       </body>
     </body>
-    <body name="robot_9/basket_1" pos="2.1817271689792226 2.9671137620936947 0.651">
+    <body name="robot_9/cube_1" pos="2.1163454337958445 2.944093395559281 0.531">
       <freejoint />
-      <geom name="robot_9/basket_geom1" type="cylinder" size="0.1 0.05" rgba="0.8 0.6 0.4 1" density="1000" friction="1 0.1 0.002" contype="2" conaffinity="2" />
+      <geom name="robot_9/block_geom1" type="box" size="0.03 0.03 0.03" rgba="0.2 0.4 0.8 1" density="500" contype="2" conaffinity="2" />
     </body>
   </worldbody>
   <default>

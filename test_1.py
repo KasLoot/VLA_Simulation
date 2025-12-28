@@ -1,64 +1,73 @@
-import mujoco as mj
-import mujoco.viewer
-import time
-import numpy as np
-import os
-from pathlib import Path
-import xml.etree.ElementTree as ET
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 
 
 
-from utils.scene_generator import SceneGenerator
-from utils.objects import ObjectLibrary
-from utils.env_builder import EnvironmentBuilder
+class SimpleModel(nn.Module):
+    def __init__(self, input_size=12, hidden_size=128, output_size=6):
+        super(SimpleModel, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, output_size)
+
+        self.rms1 = nn.RMSNorm(hidden_size)
+        self.rms2 = nn.RMSNorm(hidden_size)
+        self.rms3 = nn.RMSNorm(hidden_size)
+
+        self.log_std = nn.Parameter(torch.ones(output_size)*-1.0)
 
 
-class EnvironmentConfig:
-    row_spacing = 1.5 # Increased spacing for desks
-    column_spacing = 1.5
-    maximum_robots_per_row = 4
-    env_template_path = "environments/templets/env_temp_1.xml"
-    seed = 20
+    def forward(self, x):
+        x = F.silu(self.rms1(self.fc1(x)))
+        x = F.silu(self.rms2(self.fc2(x)))
+        x = F.silu(self.rms3(self.fc3(x)))
+        x = self.fc4(x)
 
-class RobotsConfig:
-    names = ["franka_emika_panda"]
-    quantities = [10]
-    init_joint_positions = [[0.0]*9]
+        mean = F.tanh(x)  # Assuming action space is between -1 and 1
 
-class SimulationConfig:
-    time_step: float = 0.01
+        return mean, self.log_std.exp()
 
 
-robots_config = RobotsConfig()
-robot_xml_paths = [os.path.join(Path(__file__).parent.resolve(),"robot_models", robot_name, "robot.xml") for robot_name in robots_config.names]
-print(robot_xml_paths)
+def get_reward(state: torch.Tensor, target: torch.Tensor):
+    """
+    state: (batch_size, seq_len, state_size)
+    target: (batch_size, state_size)
 
-env_config = EnvironmentConfig()
-xml_path = os.path.join(Path(__file__).parent, env_config.env_template_path)
-print(xml_path)
+    returns:
+    reward: (batch_size, seq_len - 1, state_size)
+    """
 
-scene_json_path = os.path.join(Path(__file__).parent, "scene", "pick_and_place_scene.json")
-scene_generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0], seed=42)
-scene_generator.generate_scene(task="pick_and_place", surface_position=[0.5, 0, 0], min_objects=1, max_objects=3)
+    # schedule = torch.linspace(0, 1, steps=state.size(1)).to(state.device).exp() - 1.0
+    # schedule = schedule / schedule.max()
+    
 
-objects_dir = os.path.join(Path(__file__).parent, "objects")
-builder = EnvironmentBuilder(robot_xml_paths[0], 
-                                 xml_path, 
-                                 robots_config, 
-                                 env_config, 
-                                 scene_json_path=scene_json_path, 
-                                 objects_dir=objects_dir,
-                                 seed=env_config.seed)
-env_tree = builder.build(save_path="environments/built_envs/built_environment.xml")
+    # 1. Calculate distance for ALL states (from t=0 to t=200)
+    # Shape: (batch, 201)
+    all_dists = torch.norm(target.unsqueeze(1) - state, dim=-1)
+    
+    # 2. Define Previous and Next distances aligned by time step
+    # dist_prev: Distances at t=0, 1, ..., 199 (Shape: batch, 200)
+    dist_prev = all_dists[:, :-1]
+    # dist_curr: Distances at t=1, 2, ..., 200 (Shape: batch, 200)
+    dist_curr = all_dists[:, 1:]
 
-env_tree = ET.tostring(env_tree, encoding='unicode')
-model = mj.MjModel.from_xml_string(env_tree)
-data = mj.MjData(model)
+    # 3. Calculate Improvement (Shape: batch, 200)
+    # This now perfectly matches the shape of your other rewards
+    improvement = dist_prev - dist_curr 
+    progress_reward = improvement * 10.0
 
-with mujoco.viewer.launch_passive(model, data) as viewer:
-    while viewer.is_running():
-        viewer.sync()
-        time.sleep(0.01)
+    # 4. Other Rewards (Using dist_prev to match your original logic of rewarding state_t)
+    state_all = state[:, :-1, :]
+    action_all = state[:, 1:, :]
+    action_diff = torch.norm(action_all - state_all, dim=-1)
+    
+    target_reward = -torch.clamp(dist_prev, max=2.0)
+    action_reward = -torch.abs(action_diff) * 0.01
 
+    reward = target_reward + action_reward + progress_reward
 
-time.sleep(2)
+    return reward
+

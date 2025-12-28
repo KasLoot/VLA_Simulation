@@ -29,7 +29,7 @@ class EnvironmentConfig:
 class RobotsConfig:
     names = ["franka_emika_panda"]
     quantities = [10]
-    init_joint_positions = [[0.0]*9]
+    init_joint_positions: list = [[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]]  # Panda default pose
 
 class SimulationConfig:
     time_step: float = 0.01
@@ -137,10 +137,40 @@ def run_simulation():
             target_rot=target_orientations,
             init_joint_positions=init_joint_positions,
             num_steps=200,
-            ik_maxiter=10
+            ik_maxiter=50,
+            # Continuity controls (these prevent occasional IK branch flips)
+            max_joint_step=0.25,      # rad per timestep bound (arm + fingers)
+            motion_weight=5.0,        # stronger penalty for deviating from previous q
         )
 
         print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
+
+        # --- Diagnostics: find and report joint "teleport" steps ---
+        # Focus on the 7 arm joints (ignore fingers by default)
+        arm_q = trajectory_joint_positions[:, :, :7]
+        arm_dq = np.diff(arm_q, axis=1)  # (n_robots, num_steps-1, 7)
+        arm_step_max = np.max(np.abs(arm_dq), axis=-1)  # (n_robots, num_steps-1)
+        worst_robot = int(np.argmax(np.max(arm_step_max, axis=1)))
+        worst_step = int(np.argmax(arm_step_max[worst_robot]))
+        worst_val = float(arm_step_max[worst_robot, worst_step])
+        print(
+            f"Worst per-step arm joint change: {worst_val:.3f} rad "
+            f"(robot={worst_robot}, step={worst_step}->{worst_step+1})"
+        )
+
+        spike_threshold = 0.5  # rad; adjust if you want stricter reporting
+        spike_idx = np.argwhere(arm_step_max > spike_threshold)
+        if spike_idx.size > 0:
+            print(f"Found {spike_idx.shape[0]} spike steps (> {spike_threshold} rad). Showing up to 20:")
+            for k in range(min(20, spike_idx.shape[0])):
+                r, s = spike_idx[k]
+                print(
+                    f"  robot {int(r)} step {int(s)}->{int(s)+1}: "
+                    f"max|dq|={float(arm_step_max[int(r), int(s)]):.3f} rad, "
+                    f"dq={arm_dq[int(r), int(s)]}"
+                )
+        else:
+            print(f"No arm joint spikes above {spike_threshold} rad.")
 
         # plot joint trajectories for each robot in separate subplots, 4 colomns
         num_robots = robots_config.quantities[0]

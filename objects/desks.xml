@@ -1,17 +1,17 @@
 <body name="desk_1" class="surface">
     <geom name="desk_geom"
             type="box"
-            size="0.25 0.25 0.3"
+            size="0.1 0.25 0.25"
             rgba="0.7 0.5 0.3 0.4"
             contype="1"
             conaffinity="1"/>
 </body>
 
-<body name="desk_2" class="surface">
+<!-- <body name="desk_2" class="surface">
     <geom name="desk_geom"
             type="box"
-            size="0.5 0.5 0.3"
+            size="0.5 0.5 0.1"
             rgba="0.7 0.5 0.3 0.4"
             contype="1"
             conaffinity="1"/>
-</body>
+</body> -->
