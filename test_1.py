@@ -29,6 +29,35 @@ class SimpleModel(nn.Module):
         mean = F.tanh(x)  # Assuming action space is between -1 and 1
 
         return mean, self.log_std.exp()
+    
+
+
+class Model_2(nn.Module):
+    def __init__(self, input_size=19, hidden_size=128, output_size=7):
+        super(Model_2, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.fc3 = nn.Linear(hidden_size, hidden_size)
+        self.fc4 = nn.Linear(hidden_size, output_size)
+
+        self.rms1 = nn.RMSNorm(hidden_size)
+        self.rms2 = nn.RMSNorm(hidden_size)
+        self.rms3 = nn.RMSNorm(hidden_size)
+
+        self.log_std = nn.Parameter(torch.ones(output_size)*-1.0)
+    def forward(self, x):
+        x = F.silu(self.rms1(self.fc1(x)))
+        x = F.silu(self.rms2(self.fc2(x)))
+        x = F.silu(self.rms3(self.fc3(x)))
+        x = self.fc4(x)
+
+        mean = x
+        # mean = F.tanh(x)  # Assuming action space is between -1 and 1
+
+        return mean, self.log_std.exp()
+        
+
+
 
 
 def get_reward(state: torch.Tensor, target: torch.Tensor):

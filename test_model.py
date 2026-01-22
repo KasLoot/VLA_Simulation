@@ -4,6 +4,8 @@ import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import torch
+
 
 from utils.sim_engine import SimEngine
 from utils.env_builder import EnvironmentBuilder
@@ -28,7 +30,7 @@ class EnvironmentConfig:
 
 class RobotsConfig:
     names = ["franka_emika_panda"]
-    quantities = [100]
+    quantities = [10]
     init_joint_positions: list = [[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]]  # Panda default pose
 
 class SimulationConfig:
@@ -130,88 +132,59 @@ def run_simulation():
         target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
         print(f"Target Position Input:\n {target_pos_input}")
 
-        trajectory_joint_positions = robot.generate_trajectory(
-            start_pos=start_ee_positions_local, 
-            start_rot=start_ee_orientations, 
-            target_pos=target_pos_input, # Use the specific object target
-            target_rot=target_orientations,
-            init_joint_positions=init_joint_positions,
-            num_steps=200,
-            ik_maxiter=50,
-            # Continuity controls (these prevent occasional IK branch flips)
-            max_joint_step=0.25,      # rad per timestep bound (arm + fingers)
-            motion_weight=5.0,        # stronger penalty for deviating from previous q
-        )
+
+        from test_1 import Model_2
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        print("Using device:", device)
+
+        model = Model_2(input_size=19, hidden_size=128, output_size=7).to(device).to(torch.float32)
+        model.load_state_dict(torch.load("checkpoints/pretrained_model.pth"))
+        model.eval()
+
+        current_ee_positions_local = start_ee_positions_local.copy()
+        current_ee_orientations_euler = robot.rotation_matrix_to_euler_angles(start_ee_orientations.copy())
+        target_ee_positions = target_pos_input
+        target_ee_orientations_euler = np.array([[0.0, np.pi, 0.0]] * robots_config.quantities[0])
+        current_joint_positions = init_joint_positions.copy()
+        print(f"current_joint_positions shape: {current_joint_positions.shape}")
+
+        input_state = np.hstack([
+            current_ee_positions_local,
+            current_ee_orientations_euler,
+            target_ee_positions,
+            target_ee_orientations_euler,
+            current_joint_positions[:, :7]
+        ])  # Shape: (10, 19)
+
         
-        data_save_path = "data/v_1"
-        if not os.path.exists(data_save_path):
-            os.makedirs(data_save_path)
-        
-        data2save = {
-            "trajectory_joint_positions": trajectory_joint_positions,
-            "target_pos_input": target_pos_input,
-            "target_orientations": target_orientations,
-            "start_ee_positions_local": start_ee_positions_local,
-            "start_ee_orientations": start_ee_orientations,
-            "start_joint_positions": start_joint_positions,
-            "init_joint_positions": init_joint_positions,
-        }
-        np.savez_compressed(os.path.join(data_save_path, "trajectory_data.npz"), **data2save)
 
+        input_state_tensor = torch.tensor(input_state, dtype=torch.float32).to(device)
+        print(f"Input State Tensor shape: {input_state_tensor.shape}")
 
-
-        print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
-
-        # --- Diagnostics: find and report joint "teleport" steps ---
-        # Focus on the 7 arm joints (ignore fingers by default)
-        arm_q = trajectory_joint_positions[:, :, :7]
-        arm_dq = np.diff(arm_q, axis=1)  # (n_robots, num_steps-1, 7)
-        arm_step_max = np.max(np.abs(arm_dq), axis=-1)  # (n_robots, num_steps-1)
-        worst_robot = int(np.argmax(np.max(arm_step_max, axis=1)))
-        worst_step = int(np.argmax(arm_step_max[worst_robot]))
-        worst_val = float(arm_step_max[worst_robot, worst_step])
-        print(
-            f"Worst per-step arm joint change: {worst_val:.3f} rad "
-            f"(robot={worst_robot}, step={worst_step}->{worst_step+1})"
-        )
-
-        spike_threshold = 0.5  # rad; adjust if you want stricter reporting
-        spike_idx = np.argwhere(arm_step_max > spike_threshold)
-        if spike_idx.size > 0:
-            print(f"Found {spike_idx.shape[0]} spike steps (> {spike_threshold} rad). Showing up to 20:")
-            for k in range(min(20, spike_idx.shape[0])):
-                r, s = spike_idx[k]
-                print(
-                    f"  robot {int(r)} step {int(s)}->{int(s)+1}: "
-                    f"max|dq|={float(arm_step_max[int(r), int(s)]):.3f} rad, "
-                    f"dq={arm_dq[int(r), int(s)]}"
-                )
-        else:
-            print(f"No arm joint spikes above {spike_threshold} rad.")
-
-        # plot joint trajectories for each robot in separate subplots, 4 colomns
-        num_robots = robots_config.quantities[0]
-        num_cols = 4
-        num_rows = (num_robots + num_cols - 1) // num_cols
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
-        for i in range(num_robots):
-            row = i // num_cols
-            col = i % num_cols
-            ax = axs[row, col] if num_rows > 1 else axs[col]
-            for j in range(7): # 7 joints
-                ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
-            ax.set_title(f'Robot {i} Joint Trajectories')
-            ax.set_xlabel('Time Step')
-            ax.set_ylabel('Joint Position (rad)')
-            ax.legend()
-        plt.tight_layout()
-        plt.show()
-
-        for joint_positions in trajectory_joint_positions.transpose((1,0,2)):
-            sim.set_joint_controls(joint_positions.flatten())
+        while viewer.is_running():
+            
+            with torch.no_grad():
+                action = model(input_state_tensor)[0]  # Shape: (10, 7)
+            action = action.cpu().numpy()
+            action = np.hstack([action, np.zeros((robots_config.quantities[0], 2))])  # Add zeros for finger joints
+            sim.set_joint_controls(action.flatten())
             sim.forward()
             viewer.sync()
             time.sleep(0.01)
+
+            # Update current states
+            current_joint_positions = action
+            current_ee_positions_local, current_ee_orientations = sim.get_all_ee_local_positions()
+            current_ee_orientations_euler = robot.rotation_matrix_to_euler_angles(current_ee_orientations)
+            input_state = np.hstack([
+                current_ee_positions_local,
+                current_ee_orientations_euler,
+                target_ee_positions,
+                target_ee_orientations_euler,
+                current_joint_positions[:, :7]
+            ])  # Shape: (10, 19)
+            input_state_tensor = torch.tensor(input_state, dtype=torch.float32).to(device)
+            
         
         # 1. Get Global Final Positions
         final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
