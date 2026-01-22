@@ -1,6 +1,5 @@
 import pinocchio as pin
 import numpy as np
-import torch
 from numpy.linalg import norm, solve
 from tqdm import tqdm
 from scipy.spatial.transform import Rotation as R, Slerp
