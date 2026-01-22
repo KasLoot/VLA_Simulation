@@ -1,0 +1,17 @@
+{
+  "env": "mujoco_panda",
+  "obs": [
+    "image_static",
+    "image_ee",
+    "ee_pos",
+    "ee_quat"
+  ],
+  "action": [
+    "target_pos",
+    "delta_pos"
+  ],
+  "language": [
+    "text"
+  ],
+  "note": "IK-generated demonstrations for VLA fine-tuning"
+}

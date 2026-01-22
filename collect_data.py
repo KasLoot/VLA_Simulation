@@ -28,7 +28,7 @@ class EnvironmentConfig:
 
 class RobotsConfig:
     names = ["franka_emika_panda"]
-    quantities = [10]
+    quantities = [1]
     init_joint_positions: list = [[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]]  # Panda default pose
 
 class SimulationConfig:
