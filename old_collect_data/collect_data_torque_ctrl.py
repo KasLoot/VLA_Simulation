@@ -14,7 +14,7 @@ import json
 from dataclasses import dataclass, field
 import time
 import numpy as np
-from utils.robots import FrankaPandaRobot
+from utils.robots_old import FrankaPandaRobot
 
 import matplotlib.pyplot as plt
 
@@ -81,8 +81,8 @@ def run_simulation():
     generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0], seed=env_config.seed)
     
     # Tunable surface position [x, y, z] relative to robot
-    surface_position = [0.5, 0.0, 0.0]
-    generator.generate_scene(task="pick_and_place", surface_position=surface_position, min_objects=3, max_objects=3, collision=False)
+    surface_position = [0.6, 0.0, 0.0]
+    generator.generate_scene(task="pick_and_place", surface_position=surface_position, min_objects=1, max_objects=1, collision=False)
 
     with open(scene_json_path, 'r') as f:
         scene_data = json.load(f)
@@ -129,15 +129,15 @@ def run_simulation():
         assert init_joint_positions.all() == np.array(robots_config.init_joint_positions[0]).reshape(robots_config.quantities[0], -1).all(), "Initial joint positions do not match configuration."
         print(f"Start Joint Positions shape: {start_joint_positions.shape}")
 
-        # target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
-        # print(f"Target Position Input:\n {target_pos_input}")
+        target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
+        print(f"Target Position Input:\n {target_pos_input}")
 
-        # target_joint_positions = robot.inverse_kinematics_optimization(
-        #         target_pos=target_pos_input, 
-        #         target_rot=target_orientations,
-        #         initial_q=init_joint_positions,
-        #         maxiter=20
-        #     )
+        target_joint_positions = robot.inverse_kinematics_optimization(
+                target_pos=target_pos_input, 
+                target_rot=target_orientations,
+                initial_q=init_joint_positions,
+                maxiter=20
+            )
 
         # sim.set_joint_controls(target_joint_positions.flatten())
         # sim.forward()
@@ -180,56 +180,46 @@ def run_simulation():
         mes_ee_orientation = []
         mes_joint_positions_all = []
 
-        for target_pos in target_object_cartesian_positions:
-            target_pos[2] += 0.025  # Slightly above the object to avoid collision
-            target_joint_positions = robot.inverse_kinematics_optimization(
-                target_pos=target_pos, 
-                target_rot=target_orientations,
-                initial_q=init_joint_positions,
-                maxiter=20
+        duration = 20.0
+        for t in range(int(duration / sim_config.time_step)):
+            mes_joint_positions = sim.get_joint_positions().reshape(robots_config.quantities[0], -1)
+            mes_joint_velocities = sim.get_joint_velocities().reshape(robots_config.quantities[0], -1)
+            mes_joint_positions_all.append(mes_joint_positions)
+            mes_ee_pos, mes_ee_ori = sim.get_all_ee_local_positions()
+            # print(f"mes_joint_positions shape: {mes_joint_positions.shape}, target_joint_positions shape: {target_joint_positions.shape}")
+            controls = robot.pd_control(
+            target_positions=target_joint_positions, 
+            current_positions=mes_joint_positions, 
+            current_velocities=mes_joint_velocities,
             )
-            duration = 5.0
-            for t in range(int(duration / sim_config.time_step)):
-                mes_joint_positions = sim.get_joint_positions().reshape(robots_config.quantities[0], -1)
-                mes_joint_velocities = sim.get_joint_velocities().reshape(robots_config.quantities[0], -1)
-                mes_joint_positions_all.append(mes_joint_positions)
-                mes_ee_pos, mes_ee_ori = sim.get_all_ee_local_positions()
-                # print(f"mes_joint_positions shape: {mes_joint_positions.shape}, target_joint_positions shape: {target_joint_positions.shape}")
-                controls = robot.feedback_lin_ctrl(
-                    current_positions=mes_joint_positions,
-                    current_velocities=mes_joint_velocities,
-                    target_positions=target_joint_positions,
-                    target_velocities=np.zeros_like(target_joint_positions),
-                    finger_mode="position",
-                )
-                sim.set_actuator_controls(controls.flatten())
-                sim.step()
-                viewer.sync()
-                # time.sleep(sim_config.time_step)
-            
-            # 1. Get Global Final Positions
-            final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
+            sim.set_actuator_controls(controls.flatten())
+            sim.step()
+            viewer.sync()
+            time.sleep(sim_config.time_step)
+        
+        # 1. Get Global Final Positions
+        final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
 
-            # 4. Calculate True Error
-            # We compare Local Actuals vs Local Targets
-            diffs = np.abs(final_ee_positions_local - target_pos)
+        # 4. Calculate True Error
+        # We compare Local Actuals vs Local Targets
+        diffs = np.abs(final_ee_positions_local - target_pos_input)
 
-            print("Final Local EE Positions (Corrected):\n", final_ee_positions_local)
-            print("Target Local EE Positions:\n", target_pos)
-            print("True Position Differences (Local vs Local):\n", diffs)
+        print("Final Local EE Positions (Corrected):\n", final_ee_positions_local)
+        print("Target Local EE Positions:\n", target_pos_input)
+        print("True Position Differences (Local vs Local):\n", diffs)
 
-            # # plot joint trajectories for the first robot
-            # mes_joint_positions_all = np.array(mes_joint_positions_all)  # Shape: (time_steps, num_robots, num_joints)
-            # print(f"Measured Joint Positions All shape: {mes_joint_positions_all.shape}")
-            # fig, ax = plt.subplots(figsize=(10, 6))
-            # for j in range(7): # 7 joints
-            #     ax.plot(mes_joint_positions_all[:, 0, j], label=f'Joint {j+1}')
-            # ax.set_title(f'Robot 0 Joint Trajectories')
-            # ax.set_xlabel('Time Step')
-            # ax.set_ylabel('Joint Position (rad)')
-            # ax.legend()
-            # plt.tight_layout()
-            # plt.show()
+        # plot joint trajectories for the first robot
+        mes_joint_positions_all = np.array(mes_joint_positions_all)  # Shape: (time_steps, num_robots, num_joints)
+        print(f"Measured Joint Positions All shape: {mes_joint_positions_all.shape}")
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for j in range(7): # 7 joints
+            ax.plot(mes_joint_positions_all[:, 0, j], label=f'Joint {j+1}')
+        ax.set_title(f'Robot 0 Joint Trajectories')
+        ax.set_xlabel('Time Step')
+        ax.set_ylabel('Joint Position (rad)')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
 
         while viewer.is_running():
             continue

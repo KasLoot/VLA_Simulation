@@ -1,23 +1,17 @@
-import mujoco as mj
+import mujoco
 import mujoco.viewer
-import os
-import xml.etree.ElementTree as ET
-from pathlib import Path
-
-
-from utils.sim_engine import SimEngine
+import numpy as np
+from scipy.spatial.transform import Rotation as R
+import time
+from utils.robots import FrankaPandaRobot
 from utils.env_builder import EnvironmentBuilder
 from utils.scene_generator import SceneGenerator
-import json
+import xml.etree.ElementTree as ET
 
 
-from dataclasses import dataclass, field
-import time
-import numpy as np
-from utils.robots import FrankaPandaRobot
 
-import matplotlib.pyplot as plt
 
+robot = FrankaPandaRobot()
 
 class EnvironmentConfig:
     row_spacing = 1.5 # Increased spacing for desks
@@ -28,27 +22,19 @@ class EnvironmentConfig:
 
 class RobotsConfig:
     names = ["franka_emika_panda"]
-    quantities = [1]
-    init_joint_positions: list = [[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]]  # Panda default pose
+    quantities = [10]
+    init_joint_positions: np.ndarray = np.array([[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]])  # Panda default pose
 
 class SimulationConfig:
     time_step: float = 0.01
     # gui_refresh_rate: int = 1
     # physics_steps_per_control_step: int = 10
 
-
-def get_target_object_positions(robots_config: RobotsConfig, sim: SimEngine, scene_data: dict):
-    assert robots_config.quantities[0] == len(scene_data), "Mismatch between number of robots and scene data entries."
-    target_object_locations = []
-    for i, scene in enumerate(scene_data):
-        target_object_name = scene["objects"][0]
-        base_name = f"robot_{i}"
-        base_pos = sim.get_body_position_from_name(base_name)
-        target_object_pos = sim.get_body_position_from_name(f"{base_name}/{target_object_name}")
-        target_object_locations.append(target_object_pos - base_pos)
-    return np.array(target_object_locations)
-
-def get_target_object_positions(robots_config: RobotsConfig, sim: SimEngine, scene_data: dict):
+from utils.sim_engine import SimEngine
+import json
+import os
+from pathlib import Path
+def get_target_object_positions(robots_config: RobotsConfig, sim: SimEngine, scene_data: dict, *, local: bool = True):
     assert robots_config.quantities[0] == len(scene_data), "Mismatch between number of robots and scene data entries."
     target_object_locations = []
     for i, scene in enumerate(scene_data):
@@ -58,23 +44,22 @@ def get_target_object_positions(robots_config: RobotsConfig, sim: SimEngine, sce
         for obj in scene["objects"]:
             target_object_name = obj
             target_object_pos = sim.get_body_position_from_name(f"{base_name}/{target_object_name}")
-            locations.append(target_object_pos - base_pos)
+            if local:
+                locations.append(target_object_pos - base_pos)
+            else:
+                locations.append(target_object_pos)
         target_object_locations.append(locations)
     return np.array(target_object_locations)
-            
 
 
-def run_simulation():
+def main():
     robots_config = RobotsConfig()
     robot_xml_paths = [os.path.join(Path(__file__).parent.resolve(),"robot_models", robot_name, "robot.xml") for robot_name in robots_config.names]
-    print(robot_xml_paths)
-    
+
     env_config = EnvironmentConfig()
     xml_path = os.path.join(Path(__file__).parent, env_config.env_template_path)
     print(xml_path)
 
-    robot = FrankaPandaRobot(model_path=robot_xml_paths[0])
-    
     # Generate Scene JSON
     scene_json_path = os.path.join(Path(__file__).parent, "scene", "pick_and_place_scene.json")
     generator = SceneGenerator(output_path=scene_json_path, num_robots=robots_config.quantities[0], seed=env_config.seed)
@@ -97,124 +82,106 @@ def run_simulation():
                                  seed=env_config.seed)
     env_tree = builder.build(save_path="environments/built_envs/built_environment.xml")
 
-    env_tree = ET.tostring(env_tree, encoding='unicode')
-    sim_env = mj.MjModel.from_xml_string(env_tree)
+    model = mujoco.MjModel.from_xml_path("environments/built_envs/built_environment.xml")
 
-    sim_config = SimulationConfig()
-    sim = SimEngine(sim_env=sim_env, sim_config=sim_config, robots_config=robots_config)
-    sim.reset()
+    # target_pos = np.array([0.0, 0.0, 0.0])
+    target_rot_matrix = R.from_euler('xyz', [np.pi, 0, 0]).as_matrix()
+    print("Target Rotation Matrix:\n", target_rot_matrix)
 
-    with mujoco.viewer.launch_passive(sim.sim_env, sim.data) as viewer:
+    scene_json_path = os.path.join(Path(__file__).parent, "scene", "pick_and_place_scene.json")
+    with open(scene_json_path, 'r') as f:
+        scene_data = json.load(f)
+    print(f"scene_data:\n{scene_data}")
+    sim = SimEngine(sim_env=model, sim_config=SimulationConfig(), robots_config=robots_config)
+    # Use the SimEngine-owned MjData everywhere to avoid desync between simulation state and viewer.
+    data = sim.data
+    n_robots = int(sim.total_robots)
+    init_q = robots_config.init_joint_positions
+
+    # Targets: use GLOBAL positions for IK (site_xpos is global). Pick the first object for each robot.
+    target_pos_all = get_target_object_positions(robots_config, sim, scene_data, local=False)
+    if target_pos_all.ndim != 3 or target_pos_all.shape[0] != n_robots or target_pos_all.shape[2] != 3:
+        raise ValueError(f"Unexpected target_pos_all shape {target_pos_all.shape}; expected (N, num_obj, 3) with N={n_robots}.")
+    if target_pos_all.shape[1] < 1:
+        raise ValueError("Scene data contains no objects per robot; cannot build IK targets.")
+    target_pos = target_pos_all[:, 0, :]  # (N,3)
+    target_rot_batch = np.repeat(target_rot_matrix[None, :, :], n_robots, axis=0)
+    print(f"Target Positions batch shape: {target_pos.shape}")
+
+
+    # Gather site ids for all robots.
+    ee_site_ids = []
+    for i in range(n_robots):
+        site_name = f"robot_{i}/hand_tip_site"
+        sid = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_SITE, site_name)
+        if sid < 0:
+            raise ValueError(
+                f"Could not find site '{site_name}' in the model. "
+                "Check the generated XML for the exact site name and robot count."
+            )
+        ee_site_ids.append(sid)
+    ee_site_ids = np.asarray(ee_site_ids, dtype=np.int32)
+
+    # Per-robot qpos/dof address tables (shape: N x 9)
+    if sim.robot_joint_indices.size % n_robots != 0 or sim.robot_dof_indices.size % n_robots != 0:
+        raise ValueError(
+            f"Index arrays are not divisible by number of robots N={n_robots}. "
+            f"robot_joint_indices.size={sim.robot_joint_indices.size}, robot_dof_indices.size={sim.robot_dof_indices.size}."
+        )
+    qpos_idx = sim.robot_joint_indices.reshape(n_robots, -1)
+    dof_idx = sim.robot_dof_indices.reshape(n_robots, -1)
+    if qpos_idx.shape[1] < 9 or dof_idx.shape[1] < 9:
+        raise ValueError(f"Expected 9 joints per robot. Got qpos_idx.shape={qpos_idx.shape}, dof_idx.shape={dof_idx.shape}.")
+
+    print(f"robot_joint_indices shape: {sim.robot_joint_indices.shape}")
+    # Initialize all robots joint configuration (7 arm + 2 fingers) in the sim's joint index order.
+    if init_q.size != sim.robot_joint_indices.size:
+        raise ValueError(
+            f"Expected init_q to have {sim.robot_joint_indices.size} elements (one per robot joint), "
+            f"but got {init_q.size}."
+        )
+    sim.set_joint_controls(init_q)
+    data.qvel[:] = 0.0
+    mujoco.mj_forward(model, data)
+
+    d_q = robot.solve_differential_ik(
+        model=model,
+        data=data,
+        target_pos=target_pos,
+        target_rot_matrix=target_rot_batch,
+        q0=init_q.reshape(n_robots, 9),
+        ee_site_id=ee_site_ids,
+        qpos_indices=qpos_idx,
+        dof_indices=dof_idx,
+    )
+    print(f"Computed d_q batch shape: {d_q.shape}")
+
+    with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.sync()
-        # Set initial camera view
-        viewer.cam.lookat[:] = [2.0, 2.0, 0.0] # Look at center of scene
-        viewer.cam.distance = 8.0
-        viewer.cam.azimuth = 135 # Angle around Z axis
-        viewer.cam.elevation = -30 # Angle from horizon
+        while viewer.is_running():
+            d_q = robot.solve_differential_ik(
+                model=model,
+                data=data,
+                target_pos=target_pos,
+                target_rot_matrix=target_rot_batch,
+                q0=init_q.reshape(n_robots, 9),
+                ee_site_id=ee_site_ids,
+                qpos_indices=qpos_idx,
+                dof_indices=dof_idx,
+            )
 
-        target_object_cartesian_positions = get_target_object_positions(robots_config, sim, scene_data).transpose((1,0,2))
-        target_orientations = robot.euler_angles_to_rotation_matrix(np.array([[0.0, np.pi, 0.0]] * robots_config.quantities[0]))
+            # robot_joint_indices is an integer array of qpos addresses; index with it.
+            curr_q_all = data.qpos[sim.robot_joint_indices].copy().reshape(n_robots, 9)
 
-        print(f"Target Positions shape:\n{target_object_cartesian_positions.shape}")
-        print(f"Target Orientations shape:\n{target_orientations.shape}")
+            # Update only arm joints for each robot; keep finger joints as-is.
+            next_q_all = curr_q_all.copy()
+            next_q_all[:, :7] = curr_q_all[:, :7] + d_q * robot.INTEGRATION_DT
 
-
-        start_ee_positions_local, start_ee_orientations = sim.get_all_ee_local_positions()
-        print(f"Start EE Positions shape: {start_ee_positions_local.shape}, Start EE Orientations shape: {start_ee_orientations.shape}")
-        start_joint_positions = sim.get_joint_positions()
-
-
-        init_joint_positions = start_joint_positions.reshape(robots_config.quantities[0], -1)
-        print(f"Start Joint Positions shape: {start_joint_positions.shape}")
-
-        target_pos_input = target_object_cartesian_positions[0] # Shape becomes (10, 3)
-        print(f"Target Position Input:\n {target_pos_input}")
-
-        trajectory_joint_positions = robot.generate_trajectory(
-            start_pos=start_ee_positions_local, 
-            start_rot=start_ee_orientations, 
-            target_pos=target_pos_input, # Use the specific object target
-            target_rot=target_orientations,
-            init_joint_positions=init_joint_positions,
-            num_steps=200,
-            ik_maxiter=50,
-            # Continuity controls (these prevent occasional IK branch flips)
-            max_joint_step=0.25,      # rad per timestep bound (arm + fingers)
-            motion_weight=5.0,        # stronger penalty for deviating from previous q
-        )
-
-        print(f"Trajectory Joint Positions shape: {trajectory_joint_positions.shape}")
-
-        # --- Diagnostics: find and report joint "teleport" steps ---
-        # Focus on the 7 arm joints (ignore fingers by default)
-        arm_q = trajectory_joint_positions[:, :, :7]
-        arm_dq = np.diff(arm_q, axis=1)  # (n_robots, num_steps-1, 7)
-        arm_step_max = np.max(np.abs(arm_dq), axis=-1)  # (n_robots, num_steps-1)
-        worst_robot = int(np.argmax(np.max(arm_step_max, axis=1)))
-        worst_step = int(np.argmax(arm_step_max[worst_robot]))
-        worst_val = float(arm_step_max[worst_robot, worst_step])
-        print(
-            f"Worst per-step arm joint change: {worst_val:.3f} rad "
-            f"(robot={worst_robot}, step={worst_step}->{worst_step+1})"
-        )
-
-        spike_threshold = 0.5  # rad; adjust if you want stricter reporting
-        spike_idx = np.argwhere(arm_step_max > spike_threshold)
-        if spike_idx.size > 0:
-            print(f"Found {spike_idx.shape[0]} spike steps (> {spike_threshold} rad). Showing up to 20:")
-            for k in range(min(20, spike_idx.shape[0])):
-                r, s = spike_idx[k]
-                print(
-                    f"  robot {int(r)} step {int(s)}->{int(s)+1}: "
-                    f"max|dq|={float(arm_step_max[int(r), int(s)]):.3f} rad, "
-                    f"dq={arm_dq[int(r), int(s)]}"
-                )
-        else:
-            print(f"No arm joint spikes above {spike_threshold} rad.")
-
-        # plot joint trajectories for each robot in separate subplots, 4 colomns
-        num_robots = robots_config.quantities[0]
-        num_cols = 4
-        num_rows = (num_robots + num_cols - 1) // num_cols
-        fig, axs = plt.subplots(num_rows, num_cols, figsize=(15, 3*num_rows))
-        for i in range(num_robots):
-            row = i // num_cols
-            col = i % num_cols
-            ax = axs[row, col] if num_rows > 1 else axs[col]
-            for j in range(7): # 7 joints
-                ax.plot(trajectory_joint_positions[i, :, j], label=f'Joint {j+1}')
-            ax.set_title(f'Robot {i} Joint Trajectories')
-            ax.set_xlabel('Time Step')
-            ax.set_ylabel('Joint Position (rad)')
-            ax.legend()
-        plt.tight_layout()
-        plt.show()
-
-        for joint_positions in trajectory_joint_positions.transpose((1,0,2)):
-            sim.set_joint_controls(joint_positions.flatten())
+            # Assign commands back through sim.robot_joint_indices.
+            sim.set_joint_controls(next_q_all.reshape(-1))
             sim.forward()
             viewer.sync()
-            time.sleep(0.01)
-        
-        # 1. Get Global Final Positions
-        final_ee_positions_local, final_ee_orientations = sim.get_all_ee_local_positions()
-
-        # 4. Calculate True Error
-        # We compare Local Actuals vs Local Targets
-        diffs = np.abs(final_ee_positions_local - target_pos_input)
-
-        print("Final Local EE Positions (Corrected):\n", final_ee_positions_local)
-        print("Target Local EE Positions:\n", target_pos_input)
-        print("True Position Differences (Local vs Local):\n", diffs)
-
-        while viewer.is_running():
-            continue
-    
-    time.sleep(1.0)
-
-def main():
-    run_simulation()
-
+            time.sleep(robot.INTEGRATION_DT)
 
 if __name__ == "__main__":
     main()

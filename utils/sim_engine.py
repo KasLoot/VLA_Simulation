@@ -1,6 +1,6 @@
 import mujoco
 import numpy as np
-from utils.robots import FrankaPandaRobot
+from utils.robots_old import FrankaPandaRobot
 # Avoid importing run_demo here to prevent circular imports.
 # Accept generic config objects (typing.Any) instead of concrete classes.
 
