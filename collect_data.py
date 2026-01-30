@@ -7,7 +7,7 @@ from utils.robots import FrankaPandaRobot
 from utils.env_builder import EnvironmentBuilder
 from utils.scene_generator import SceneGenerator
 import xml.etree.ElementTree as ET
-
+from utils.tasks import State_Manager
 
 
 
@@ -22,8 +22,8 @@ class EnvironmentConfig:
 
 class RobotsConfig:
     names = ["franka_emika_panda"]
-    quantities = [10]
-    init_joint_positions: np.ndarray = np.array([[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 0.04, 0.04]*quantities[0]])  # Panda default pose
+    quantities = [1]
+    init_joint_positions: np.ndarray = np.array([[-0.0, 0.0, 0.0, -0.0, 0.0, 1.0, 0.0, 1.0, 1.0]*quantities[0]])  # Panda default pose
 
 class SimulationConfig:
     time_step: float = 0.01
@@ -66,7 +66,7 @@ def main():
     
     # Tunable surface position [x, y, z] relative to robot
     surface_position = [0.6, 0.0, 0.0]
-    generator.generate_scene(task="pick_and_place", surface_position=surface_position, min_objects=1, max_objects=1, collision=False)
+    generator.generate_scene(task="pick_and_place", surface_position=surface_position, min_objects=1, max_objects=1, collision=True)
 
     with open(scene_json_path, 'r') as f:
         scene_data = json.load(f)
@@ -92,7 +92,9 @@ def main():
     with open(scene_json_path, 'r') as f:
         scene_data = json.load(f)
     print(f"scene_data:\n{scene_data}")
-    sim = SimEngine(sim_env=model, sim_config=SimulationConfig(), robots_config=robots_config)
+
+    sim_config = SimulationConfig()
+    sim = SimEngine(sim_env=model, sim_config=sim_config, robots_config=robots_config)
     # Use the SimEngine-owned MjData everywhere to avoid desync between simulation state and viewer.
     data = sim.data
     n_robots = int(sim.total_robots)
@@ -105,8 +107,11 @@ def main():
     if target_pos_all.shape[1] < 1:
         raise ValueError("Scene data contains no objects per robot; cannot build IK targets.")
     target_pos = target_pos_all[:, 0, :]  # (N,3)
-    target_rot_batch = np.repeat(target_rot_matrix[None, :, :], n_robots, axis=0)
+    target_rot = np.repeat(target_rot_matrix[None, :, :], n_robots, axis=0)
     print(f"Target Positions batch shape: {target_pos.shape}")
+
+    target_grip = 0.04  # OPEN
+    gripper_max_speed = 0.02  # meters per second of joint position change
 
 
     # Gather site ids for all robots.
@@ -142,28 +147,51 @@ def main():
         )
     sim.set_joint_controls(init_q)
     data.qvel[:] = 0.0
-    mujoco.mj_forward(model, data)
+    sim.step()
 
-    d_q = robot.solve_differential_ik(
-        model=model,
-        data=data,
-        target_pos=target_pos,
-        target_rot_matrix=target_rot_batch,
-        q0=init_q.reshape(n_robots, 9),
-        ee_site_id=ee_site_ids,
-        qpos_indices=qpos_idx,
-        dof_indices=dof_idx,
-    )
-    print(f"Computed d_q batch shape: {d_q.shape}")
+    print(f"init_q reshaped: {init_q.reshape(n_robots, 9)}")
+    save_data = {
+        "init_q": init_q.copy(),
+        "target_cart_pos": target_pos.copy(),
+        "target_cart_rot": target_rot.copy(),
+        "trajectory_include_init": [init_q.copy()],
+
+    }
+
+    state_manager = State_Manager(task_name="pick_and_place")
+    full_state = state_manager.get_full_state()
+    print(f"Full State Sequence: {full_state}")
+    current_state = full_state[0]
+    print(f"Current State: {current_state}")
+
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
         viewer.sync()
+
         while viewer.is_running():
+
+            curr_ee_pos = data.site_xpos[ee_site_ids].copy()
+            curr_grip = data.qpos[qpos_idx[:, 7:9]].copy()  # (N,2)
+            diff  = np.linalg.norm(curr_ee_pos - target_pos)
+            print(f"ee pos and target pos diff: {diff}")
+            if diff < 0.01 and current_state != full_state[-1]:
+                # Move to next state
+                state_index = full_state.index(current_state)
+                current_state = full_state[state_index + 1]
+                print(f"Transitioning to next state: {current_state}")
+                target_pos, target_grip = state_manager.get_state_target_qpos(current_state, target_pos)
+                print(f"Current State: {current_state}, Target Position: {target_pos}, Target Grip: {target_grip}")
+            elif diff < 0.01 and current_state == full_state[-1]:
+                print("Final state reached and target achieved.")
+                while True:
+                    viewer.sync()
+                    time.sleep(0.1)
+
             d_q = robot.solve_differential_ik(
                 model=model,
                 data=data,
                 target_pos=target_pos,
-                target_rot_matrix=target_rot_batch,
+                target_rot_matrix=target_rot,
                 q0=init_q.reshape(n_robots, 9),
                 ee_site_id=ee_site_ids,
                 qpos_indices=qpos_idx,
@@ -172,14 +200,21 @@ def main():
 
             # robot_joint_indices is an integer array of qpos addresses; index with it.
             curr_q_all = data.qpos[sim.robot_joint_indices].copy().reshape(n_robots, 9)
+            
 
-            # Update only arm joints for each robot; keep finger joints as-is.
+
+            # Update only arm joints for each robot; smoothly move finger joints to target grip.
             next_q_all = curr_q_all.copy()
             next_q_all[:, :7] = curr_q_all[:, :7] + d_q * robot.INTEGRATION_DT
+            target_grip_arr = np.full((n_robots, 2), target_grip, dtype=np.float64)
+            max_grip_step = gripper_max_speed * robot.INTEGRATION_DT
+            grip_delta = np.clip(target_grip_arr - curr_grip, -max_grip_step, max_grip_step)
+            next_q_all[:, 7:] = curr_grip + grip_delta
 
-            # Assign commands back through sim.robot_joint_indices.
+                
             sim.set_joint_controls(next_q_all.reshape(-1))
-            sim.forward()
+            data.qvel[sim.robot_dof_indices] = 0.0
+            sim.step()
             viewer.sync()
             time.sleep(robot.INTEGRATION_DT)
 
